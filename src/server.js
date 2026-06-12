@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync, mkdirSync } from 'fs';
 import { join, extname, basename, resolve } from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -82,6 +82,8 @@ export function createServer(config) {
   app.post('/api/upload', upload.array('files', 20), async (req, res) => {
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
 
+    const customPrompt = req.body.customPrompt || '';
+
     for (const file of req.files) {
       doneFiles.add(resolve(file.path));
       processingFiles.add(file.path);
@@ -90,7 +92,7 @@ export function createServer(config) {
     const results = [];
     for (const file of req.files) {
       try {
-        await queue.add(() => processImage(file.path, config));
+        await queue.add(() => processImage(file.path, config, customPrompt));
         results.push({ original: file.originalname, status: 'ok' });
       } catch (err) {
         state.errors++;
@@ -148,6 +150,56 @@ export function createServer(config) {
 
     writeFileSync(envPath, envContent.trim() + '\n');
     addLog('info', 'Variables .env mises à jour');
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/output', (_req, res) => {
+    const outputDir = join(ROOT, config.outputDir);
+    const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'];
+
+    if (!existsSync(outputDir)) {
+      addLog('error', `Dossier output introuvable: ${outputDir}`);
+      return res.json({ ok: false, deleted: [], error: 'Dossier output introuvable' });
+    }
+
+    const allFiles = readdirSync(outputDir);
+    const files = allFiles.filter((f) => {
+      if (f === 'backups' || f === '.gitkeep' || f === 'alt-texts.csv') return false;
+      return imageExts.includes(extname(f).toLowerCase());
+    });
+
+    addLog('info', `Suppression: ${files.length} image(s) trouvée(s) sur ${allFiles.length} fichier(s)`);
+
+    const deleted = [];
+    for (const file of files) {
+      try {
+        unlinkSync(join(outputDir, file));
+        deleted.push(file);
+        addLog('info', `Supprimé: ${file}`);
+      } catch (err) {
+        addLog('error', `Échec suppression ${file}: ${err.message}`);
+      }
+    }
+
+    addLog('success', `Output nettoyé: ${deleted.length} image(s) supprimée(s)`);
+    res.json({ ok: true, deleted });
+  });
+
+  app.delete('/api/history', (_req, res) => {
+    const outputDir = join(ROOT, config.outputDir);
+    const csvPath = join(outputDir, 'alt-texts.csv');
+
+    if (existsSync(csvPath)) {
+      const backupDir = join(outputDir, 'backups');
+      if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = join(backupDir, `alt-texts-${ts}.csv`);
+      renameSync(csvPath, backupPath);
+      addLog('success', `CSV sauvegardé: ${backupPath}`);
+    } else {
+      addLog('info', 'Aucun CSV à sauvegarder');
+    }
+
     res.json({ ok: true });
   });
 

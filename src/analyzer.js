@@ -25,7 +25,7 @@ const LANGUAGE_MAP = {
 
 const client = new Anthropic();
 
-export async function processImage(filePath, config) {
+export async function processImage(filePath, config, customPrompt = '') {
   const resolvedPath = resolve(filePath);
   const imageData = readFileSync(resolvedPath);
   const base64Image = imageData.toString('base64');
@@ -40,7 +40,7 @@ export async function processImage(filePath, config) {
   addLog('info', `Analyse IA: ${originalName}`);
 
   try {
-    const analysis = await analyzeWithClaude(base64Image, mediaType, lang, config);
+    const analysis = await analyzeWithClaude(base64Image, mediaType, lang, config, customPrompt);
     addLog('info', `→ "${analysis.filename}" | alt: "${analysis.alt_text}"`);
 
     const seoFilename = buildFilename(analysis.filename, ext);
@@ -70,7 +70,7 @@ export async function processImage(filePath, config) {
   }
 }
 
-async function analyzeWithClaude(base64Image, mediaType, lang, config) {
+async function analyzeWithClaude(base64Image, mediaType, lang, config, customPrompt = '') {
   const response = await client.messages.create({
     model: config.model || 'claude-opus-4-8',
     max_tokens: 300,
@@ -88,7 +88,7 @@ async function analyzeWithClaude(base64Image, mediaType, lang, config) {
           },
           {
             type: 'text',
-            text: buildPrompt(lang),
+            text: buildPrompt(lang, customPrompt),
           },
         ],
       },
@@ -110,8 +110,8 @@ async function analyzeWithClaude(base64Image, mediaType, lang, config) {
   return parsed;
 }
 
-function buildPrompt(lang) {
-  return `Analyse cette image pour le SEO d'un site web. Réponds UNIQUEMENT avec un JSON valide, sans aucun texte avant ou après.
+function buildPrompt(lang, customPrompt = '') {
+  let prompt = `Analyse cette image pour le SEO d'un site web. Réponds UNIQUEMENT avec un JSON valide, sans aucun texte avant ou après.
 
 Le JSON doit contenir exactement ces champs:
 - "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier.
@@ -119,6 +119,12 @@ Le JSON doit contenir exactement ces champs:
 - "keywords": un tableau de 3 à 5 mots-clés pertinents ${lang}
 
 IMPORTANT: Retourne UNIQUEMENT le JSON brut, sans blocs de code markdown.`;
+
+  if (customPrompt) {
+    prompt += `\n\nContexte supplémentaire fourni par l'utilisateur — utilise ces informations pour guider le nom de fichier, le texte alternatif et les mots-clés:\n${customPrompt}`;
+  }
+
+  return prompt;
 }
 
 function buildFilename(aiFilename, ext) {

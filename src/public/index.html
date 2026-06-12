@@ -174,7 +174,8 @@
 
     select,
     input[type="text"],
-    input[type="password"] {
+    input[type="password"],
+    textarea {
       width: 100%;
       background: var(--bg-input);
       border: 1px solid var(--border);
@@ -185,10 +186,12 @@
       font-family: inherit;
       outline: none;
       transition: border-color .15s;
+      resize: vertical;
     }
 
     select:focus,
-    input:focus {
+    input:focus,
+    textarea:focus {
       border-color: var(--accent);
     }
 
@@ -635,6 +638,10 @@
       <!-- UPLOAD -->
       <div class="card">
         <h2>Upload d'images</h2>
+        <div class="field" style="margin-bottom:.75rem">
+          <label>Instructions pour l'IA (optionnel)</label>
+          <textarea id="custom-prompt" rows="3" placeholder="Ex: Photo de produits cosmétiques bio, style minimaliste, fond blanc…"></textarea>
+        </div>
         <div class="upload-zone" id="drop-zone">
           <div class="icon">&#128444;</div>
           <p>Glissez vos images ici<br>ou <a href="#">cliquez pour sélectionner</a></p>
@@ -705,7 +712,13 @@
 
     <!-- HISTORY -->
     <div class="card section-gap">
-      <h2>Historique des traitements</h2>
+      <div class="toggle-row" style="margin-bottom:1rem">
+        <h2 style="margin:0">Historique des traitements</h2>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn" id="clear-output" style="border-color:var(--yellow);color:var(--yellow)">Supprimer fichiers</button>
+          <button class="btn" id="clear-history" style="border-color:var(--red);color:var(--red)">Effacer l'historique</button>
+        </div>
+      </div>
       <div id="history-container">
         <div class="empty-state">Aucune image traitée pour le moment</div>
       </div>
@@ -792,6 +805,8 @@
       $('#st-shopify-token').innerHTML = envIndicator(env.shopify.tokenSet, env.shopify.tokenMasked);
     }
 
+    const deletedFiles = new Set();
+
     async function loadHistory() {
       const history = await api('GET', '/api/history');
       const container = $('#history-container');
@@ -805,10 +820,12 @@
       </tr></thead><tbody>`;
       for (const h of history) {
         const date = new Date(h.date).toLocaleString('fr-FR');
+        const isDeleted = deletedFiles.has(h.filename);
+        const deletedTag = isDeleted ? ' <span style="color:var(--red);font-size:.7rem">(supprimé)</span>' : '';
         html += `<tr>
         <td><img class="thumb" src="/output/${esc(h.filename)}" alt="" onerror="this.style.display='none'"></td>
         <td>${esc(h.original)}</td>
-        <td><span class="filename">${esc(h.filename)}</span></td>
+        <td><span class="filename">${esc(h.filename)}</span>${deletedTag}</td>
         <td class="alt-text" title="${esc(h.alt_text)}">${esc(h.alt_text)}</td>
         <td>${esc(h.keywords)}</td>
         <td style="color:var(--text-dim);white-space:nowrap">${date}</td>
@@ -862,6 +879,30 @@
       await refreshStatus();
     });
 
+    // Clear output files
+    $('#clear-output').addEventListener('click', async () => {
+      if (!confirm('Supprimer toutes les images de output/ ? Le CSV et l\'historique seront conservés.')) return;
+      const res = await fetch('/api/output', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) {
+        data.deleted.forEach((f) => deletedFiles.add(f));
+        await loadHistory();
+        await refreshStatus();
+      }
+    });
+
+    // Clear history
+    $('#clear-history').addEventListener('click', async () => {
+      if (!confirm('Effacer l\'historique ? Le CSV sera sauvegardé dans backups/.')) return;
+      const res = await fetch('/api/history', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) {
+        deletedFiles.clear();
+        await loadHistory();
+        await refreshStatus();
+      }
+    });
+
     // Upload
     const dropZone = $('#drop-zone');
     const fileInput = $('#file-input');
@@ -888,6 +929,8 @@
 
       const formData = new FormData();
       for (const f of files) formData.append('files', f);
+      const customPrompt = $('#custom-prompt').value.trim();
+      if (customPrompt) formData.append('customPrompt', customPrompt);
 
       items.forEach((i) => { i.status = 'uploading'; });
       renderProgress(items);
