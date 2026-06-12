@@ -1,0 +1,57 @@
+import { watch as chokidarWatch } from 'chokidar';
+import { extname, resolve } from 'path';
+import { processImage } from './analyzer.js';
+import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
+
+const SUPPORTED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif',
+]);
+
+let watcherInstance = null;
+
+export function startWatcher(config) {
+  if (watcherInstance) return;
+
+  const inputDir = config.inputDir || './input';
+
+  watcherInstance = chokidarWatch(inputDir, {
+    ignoreInitial: true,
+    ignorePermissionErrors: true,
+    awaitWriteFinish: {
+      stabilityThreshold: 2000,
+      pollInterval: 500,
+    },
+  });
+
+  watcherInstance.on('add', (filePath) => {
+    const resolved = resolve(filePath);
+    const ext = extname(resolved).toLowerCase();
+    if (!SUPPORTED_EXTENSIONS.has(ext)) return;
+    if (processingFiles.has(resolved) || doneFiles.has(resolved)) return;
+
+    addLog('info', `Image détectée: ${filePath}`);
+
+    queue.add(() => processImage(resolved, config)).catch((err) => {
+      addLog('error', `Erreur ${filePath}: ${err.message}`);
+      state.errors++;
+    });
+  });
+
+  watcherInstance.on('error', (err) => {
+    addLog('error', `Watcher: ${err.message}`);
+  });
+
+  watcherInstance.on('ready', () => {
+    state.watcherActive = true;
+    addLog('info', `Surveillance active: ${inputDir}/`);
+  });
+}
+
+export async function stopWatcher() {
+  if (watcherInstance) {
+    await watcherInstance.close();
+    watcherInstance = null;
+    state.watcherActive = false;
+    addLog('info', 'Surveillance arrêtée');
+  }
+}

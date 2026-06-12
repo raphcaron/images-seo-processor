@@ -1,0 +1,8 @@
+{
+  "inputDir": "./input",
+  "outputDir": "./output",
+  "platform": "shopify",
+  "language": "fr",
+  "model": "claude-opus-4-8",
+  "shopifyApiVersion": "2025-01"
+}
