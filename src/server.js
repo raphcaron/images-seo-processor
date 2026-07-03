@@ -32,12 +32,18 @@ export function createServer(config) {
 
   startWatcher(config);
 
+  function countHistory() {
+    const csvPath = join(ROOT, config.outputDir, 'alt-texts.csv');
+    if (!existsSync(csvPath)) return 0;
+    return readFileSync(csvPath, 'utf-8').trim().split('\n').length - 1;
+  }
+
   app.get('/api/status', (_req, res) => {
     res.json({
       watcherActive: state.watcherActive,
       isProcessing: state.isProcessing,
       currentFile: state.currentFile,
-      processed: state.processed,
+      processed: countHistory(),
       errors: state.errors,
       queueSize: queue.size,
       logs: state.logs.slice(-80),
@@ -96,6 +102,7 @@ export function createServer(config) {
         results.push({ original: file.originalname, status: 'ok' });
       } catch (err) {
         state.errors++;
+        addLog('error', `Erreur ${file.originalname}: ${err.message}`);
         results.push({ original: file.originalname, status: 'error', error: err.message });
       } finally {
         processingFiles.delete(file.path);
@@ -199,6 +206,8 @@ export function createServer(config) {
     } else {
       addLog('info', 'Aucun CSV à sauvegarder');
     }
+
+    state.errors = 0;
 
     res.json({ ok: true });
   });

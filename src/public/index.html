@@ -927,28 +927,31 @@
       }));
       renderProgress(items);
 
-      const formData = new FormData();
-      for (const f of files) formData.append('files', f);
       const customPrompt = $('#custom-prompt').value.trim();
-      if (customPrompt) formData.append('customPrompt', customPrompt);
 
       items.forEach((i) => { i.status = 'uploading'; });
       renderProgress(items);
 
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await res.json();
+      await Promise.all(Array.from(files).map(async (file, i) => {
+        const formData = new FormData();
+        formData.append('files', file);
+        if (customPrompt) formData.append('customPrompt', customPrompt);
 
-        for (let i = 0; i < data.results.length; i++) {
-          items[i].status = data.results[i].status === 'ok' ? 'ok' : 'error';
-          if (data.results[i].error) items[i].error = data.results[i].error;
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          const result = data.results?.[0];
+          items[i].status = result?.status === 'ok' ? 'ok' : 'error';
+          if (result?.error) items[i].error = result.error;
+        } catch (err) {
+          items[i].status = 'error';
+          items[i].error = err.message;
         }
-      } catch (err) {
-        items.forEach((i) => { i.status = 'error'; i.error = err.message; });
-      }
 
-      renderProgress(items);
-      await refreshStatus();
+        renderProgress(items);
+        refreshStatus();
+      }));
+
       await loadHistory();
     }
 

@@ -62,7 +62,6 @@ export async function processImage(filePath, config, customPrompt = '') {
       addLog('info', `Upload ignoré (platform: ${config.platform})`);
     }
 
-    state.processed++;
     addLog('success', `Terminé: ${seoFilename}`);
   } finally {
     state.isProcessing = false;
