@@ -3,7 +3,9 @@ node_modules/
 profiles.json
 output/*.csv
 output/*.*
+output/backups/
 input/*.*
 input/failed/*.*
 !input/.gitkeep
 !output/.gitkeep
+doublons-wordpress-*.txt
