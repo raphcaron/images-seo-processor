@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { basename, extname } from 'path';
 import { addLog } from '../state.js';
+import { withRetry } from './retry.js';
 
 const MEDIA_TYPES = {
   jpg: 'image/jpeg',
@@ -11,11 +12,12 @@ const MEDIA_TYPES = {
   gif: 'image/gif',
 };
 
-export async function uploadToShopify(filePath, altText, config) {
-  const { SHOPIFY_STORE, SHOPIFY_ACCESS_TOKEN } = process.env;
+export async function uploadToShopify(filePath, altText, shopifyCreds) {
+  const store = shopifyCreds?.store;
+  const accessToken = shopifyCreds?.accessToken;
 
-  if (!SHOPIFY_STORE || !SHOPIFY_ACCESS_TOKEN) {
-    addLog('warn', 'Shopify: variables .env manquantes, upload ignoré');
+  if (!store || !accessToken) {
+    addLog('warn', 'Shopify: destination sans identifiants complets, upload ignoré');
     return;
   }
 
@@ -23,39 +25,47 @@ export async function uploadToShopify(filePath, altText, config) {
   const filename = basename(filePath);
   const ext = extname(filename).replace('.', '').toLowerCase();
   const mimeType = MEDIA_TYPES[ext] || 'image/jpeg';
-  const apiVersion = config.shopifyApiVersion || '2025-01';
-  const adminUrl = `https://${SHOPIFY_STORE}/admin/api/${apiVersion}/graphql.json`;
+  const apiVersion = shopifyCreds?.apiVersion || '2025-01';
+  const adminUrl = `https://${store}/admin/api/${apiVersion}/graphql.json`;
 
   addLog('info', `Upload Shopify: ${filename}`);
 
-  const stagedTarget = await createStagedUpload(adminUrl, filename, mimeType, fileData.length);
+  const stagedTarget = await createStagedUpload(adminUrl, accessToken, filename, mimeType, fileData.length);
   await uploadToStagedTarget(stagedTarget, fileData, filename);
-  const file = await createFile(adminUrl, stagedTarget.resourceUrl, filename, altText);
+  const file = await createFile(adminUrl, accessToken, stagedTarget.resourceUrl, filename, altText);
 
   addLog('success', `Shopify: ${file?.id || 'OK'}`);
   return file;
 }
 
-async function shopifyGraphQL(url, query, variables) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
+async function shopifyGraphQL(url, accessToken, query, variables) {
+  return withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+
+    if (!response.ok && response.status >= 500) {
+      const err = new Error(`Shopify GraphQL (${response.status})`);
+      err.status = response.status;
+      throw err;
+    }
+
+    const data = await response.json();
+
+    if (data.errors?.length) {
+      throw new Error(`Shopify GraphQL: ${JSON.stringify(data.errors)}`);
+    }
+
+    return data.data;
   });
-
-  const data = await response.json();
-
-  if (data.errors?.length) {
-    throw new Error(`Shopify GraphQL: ${JSON.stringify(data.errors)}`);
-  }
-
-  return data.data;
 }
 
-async function createStagedUpload(adminUrl, filename, mimeType, fileSize) {
+async function createStagedUpload(adminUrl, accessToken, filename, mimeType, fileSize) {
   const query = `
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
       stagedUploadsCreate(input: $input) {
@@ -85,7 +95,7 @@ async function createStagedUpload(adminUrl, filename, mimeType, fileSize) {
     }],
   };
 
-  const data = await shopifyGraphQL(adminUrl, query, variables);
+  const data = await shopifyGraphQL(adminUrl, accessToken, query, variables);
 
   if (data.stagedUploadsCreate.userErrors?.length) {
     throw new Error(`Shopify stagedUploadsCreate: ${JSON.stringify(data.stagedUploadsCreate.userErrors)}`);
@@ -95,25 +105,29 @@ async function createStagedUpload(adminUrl, filename, mimeType, fileSize) {
 }
 
 async function uploadToStagedTarget(target, fileData, filename) {
-  const formData = new FormData();
+  await withRetry(async () => {
+    const formData = new FormData();
 
-  for (const param of target.parameters) {
-    formData.append(param.name, param.value);
-  }
+    for (const param of target.parameters) {
+      formData.append(param.name, param.value);
+    }
 
-  formData.append('file', new Blob([fileData]), filename);
+    formData.append('file', new Blob([fileData]), filename);
 
-  const response = await fetch(target.url, {
-    method: 'POST',
-    body: formData,
+    const response = await fetch(target.url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = new Error(`Shopify staged upload (${response.status})`);
+      err.status = response.status;
+      throw err;
+    }
   });
-
-  if (!response.ok) {
-    throw new Error(`Shopify staged upload (${response.status})`);
-  }
 }
 
-async function createFile(adminUrl, resourceUrl, filename, altText) {
+async function createFile(adminUrl, accessToken, resourceUrl, filename, altText) {
   const query = `
     mutation fileCreate($files: [FileCreateInput!]!) {
       fileCreate(files: $files) {
@@ -139,7 +153,7 @@ async function createFile(adminUrl, resourceUrl, filename, altText) {
     }],
   };
 
-  const data = await shopifyGraphQL(adminUrl, query, variables);
+  const data = await shopifyGraphQL(adminUrl, accessToken, query, variables);
 
   if (data.fileCreate.userErrors?.length) {
     throw new Error(`Shopify fileCreate: ${JSON.stringify(data.fileCreate.userErrors)}`);

@@ -359,6 +359,96 @@
       color: var(--yellow);
     }
 
+    .file-item .status-skip {
+      color: var(--text-dim);
+    }
+
+    .profile-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      padding: .6rem .75rem;
+      background: var(--bg-input);
+      border-radius: 6px;
+      margin-bottom: .5rem;
+      font-size: .85rem;
+    }
+
+    .profile-row .profile-info {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      overflow: hidden;
+    }
+
+    .profile-row .profile-name {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .profile-row .profile-detail {
+      color: var(--text-dim);
+      font-size: .75rem;
+      font-family: var(--mono);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .profile-row .profile-actions {
+      display: flex;
+      gap: .4rem;
+      flex-shrink: 0;
+    }
+
+    .profile-row .profile-actions .btn {
+      padding: .3rem .6rem;
+      font-size: .75rem;
+    }
+
+    .failure-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      padding: .6rem .75rem;
+      background: var(--red-bg);
+      border-radius: 6px;
+      margin-bottom: .5rem;
+      font-size: .85rem;
+    }
+
+    .failure-row .failure-info {
+      overflow: hidden;
+    }
+
+    .failure-row .failure-name {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .failure-row .failure-error {
+      color: var(--text-dim);
+      font-size: .75rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .failure-row .failure-actions {
+      display: flex;
+      gap: .4rem;
+      flex-shrink: 0;
+    }
+
+    .failure-row .failure-actions .btn {
+      padding: .3rem .6rem;
+      font-size: .75rem;
+    }
+
     .logs-box {
       background: var(--bg-input);
       border-radius: var(--radius);
@@ -608,14 +698,6 @@
         <h2>Configuration</h2>
         <div class="row">
           <div class="field">
-            <label>Plateforme</label>
-            <select id="cfg-platform">
-              <option value="wordpress">WordPress</option>
-              <option value="shopify">Shopify</option>
-              <option value="none">Aucune (local)</option>
-            </select>
-          </div>
-          <div class="field">
             <label>Langue</label>
             <select id="cfg-language">
               <option value="fr">Français</option>
@@ -624,12 +706,24 @@
               <option value="de">Deutsch</option>
             </select>
           </div>
+          <div class="field">
+            <label>Modèle IA</label>
+            <select id="cfg-model">
+              <option value="claude-opus-5">Claude Opus 5</option>
+              <option value="claude-sonnet-5">Claude Sonnet 5 (rapide, économique)</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 (le moins cher, Claude)</option>
+              <option value="claude-opus-4-8">Claude Opus 4.8</option>
+              <option value="claude-fable-5">Claude Fable 5</option>
+              <option value="gemini-flash-latest">Google Gemini Flash (gratuit, limité)</option>
+              <option value="local:qwen3-vl:8b-instruct">Qwen3-VL 8B (local, gratuit, illimité)</option>
+              <option value="local:qwen3-vl:4b-instruct">Qwen3-VL 4B (local, plus léger/rapide)</option>
+            </select>
+          </div>
         </div>
         <div class="field">
-          <label>Modèle Claude</label>
-          <select id="cfg-model">
-            <option value="claude-opus-4-8">Claude Opus 4.8</option>
-            <option value="claude-fable-5">Claude Fable 5</option>
+          <label>Destination par défaut (dossier surveillé <code>input/</code>)</label>
+          <select id="cfg-default-profile">
+            <option value="">Aucune (local)</option>
           </select>
         </div>
         <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
@@ -639,14 +733,21 @@
       <div class="card">
         <h2>Upload d'images</h2>
         <div class="field" style="margin-bottom:.75rem">
+          <label>Destination pour cet upload</label>
+          <select id="upload-destination">
+            <option value="">Aucune (local)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:.75rem">
           <label>Instructions pour l'IA (optionnel)</label>
           <textarea id="custom-prompt" rows="3" placeholder="Ex: Photo de produits cosmétiques bio, style minimaliste, fond blanc…"></textarea>
         </div>
         <div class="upload-zone" id="drop-zone">
           <div class="icon">&#128444;</div>
-          <p>Glissez vos images ici<br>ou <a href="#">cliquez pour sélectionner</a></p>
-          <p class="hint">JPG, PNG, WebP, AVIF, GIF — max 20 Mo</p>
+          <p>Glissez vos images ou un dossier ici<br>ou <a href="#" id="select-files-link">cliquez pour sélectionner des fichiers</a><br>ou <a href="#" id="select-folder-link">sélectionnez un dossier entier</a></p>
+          <p class="hint">JPG, PNG, WebP, AVIF, GIF — max 20 Mo — sous-dossiers inclus</p>
           <input type="file" id="file-input" multiple accept="image/*">
+          <input type="file" id="folder-input" webkitdirectory multiple>
         </div>
         <div class="upload-progress" id="upload-progress"></div>
       </div>
@@ -675,39 +776,88 @@
     <!-- ENV -->
     <div class="card section-gap">
       <h2>Clés API</h2>
-      <div class="env-grid">
-        <div class="field">
-          <label>Anthropic API Key <span class="env-status" id="st-anthropic"></span></label>
-          <input type="password" id="env-anthropic" placeholder="sk-ant-...">
-        </div>
-        <div class="field">
-          <label>WordPress — URL du site <span class="env-status" id="st-wp-url"></span></label>
-          <input type="text" id="env-wp-url" placeholder="https://ton-site.com">
-        </div>
-        <div class="field">
-          <label>WordPress — Utilisateur <span class="env-status" id="st-wp-user"></span></label>
-          <input type="text" id="env-wp-user" placeholder="admin">
-        </div>
-        <div class="field">
-          <label>WordPress — Mot de passe <span class="env-status" id="st-wp-pass"></span></label>
-          <input type="password" id="env-wp-pass" placeholder="xxxx xxxx xxxx xxxx">
-        </div>
-        <div class="field">
-          <label>Shopify — Store <span class="env-status" id="st-shopify-store"></span></label>
-          <input type="text" id="env-shopify-store" placeholder="ton-store.myshopify.com">
-        </div>
-        <div class="field">
-          <label>Shopify — Access Token <span class="env-status" id="st-shopify-token"></span></label>
-          <input type="password" id="env-shopify-token" placeholder="shpat_...">
-        </div>
+      <div class="field">
+        <label>Anthropic API Key <span class="env-status" id="st-anthropic"></span></label>
+        <input type="password" id="env-anthropic" placeholder="sk-ant-...">
+      </div>
+      <div class="field">
+        <label>Google Gemini API Key (gratuit — <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">obtenir une clé</a>) <span class="env-status" id="st-gemini"></span></label>
+        <input type="password" id="env-gemini" placeholder="AIza...">
       </div>
       <button class="btn btn-primary" id="env-save" style="margin-top:.5rem;">Sauvegarder les clés</button>
+    </div>
+
+    <!-- DESTINATIONS -->
+    <div class="card section-gap">
+      <div class="toggle-row" style="margin-bottom:1rem">
+        <h2 style="margin:0">Destinations (logins WordPress / Shopify)</h2>
+        <button class="btn" id="add-profile-btn">+ Ajouter une destination</button>
+      </div>
+      <div id="profiles-list"></div>
+
+      <div id="profile-form" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <input type="hidden" id="profile-id">
+        <div class="row">
+          <div class="field">
+            <label>Nom (ex: "Client A — Shopify")</label>
+            <input type="text" id="profile-name" placeholder="Nom de la destination">
+          </div>
+          <div class="field">
+            <label>Plateforme</label>
+            <select id="profile-platform">
+              <option value="shopify">Shopify</option>
+              <option value="wordpress">WordPress</option>
+            </select>
+          </div>
+        </div>
+        <div id="profile-fields-wordpress" style="display:none">
+          <div class="field">
+            <label>URL du site</label>
+            <input type="text" id="profile-wp-url" placeholder="https://ton-site.com">
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Utilisateur</label>
+              <input type="text" id="profile-wp-user" placeholder="admin">
+            </div>
+            <div class="field">
+              <label>Mot de passe application</label>
+              <input type="password" id="profile-wp-pass" placeholder="xxxx xxxx xxxx xxxx">
+            </div>
+          </div>
+        </div>
+        <div id="profile-fields-shopify">
+          <div class="row">
+            <div class="field">
+              <label>Store</label>
+              <input type="text" id="profile-shopify-store" placeholder="ton-store.myshopify.com">
+            </div>
+            <div class="field">
+              <label>Access Token</label>
+              <input type="password" id="profile-shopify-token" placeholder="shpat_...">
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem">
+          <button class="btn btn-primary" id="profile-save">Enregistrer</button>
+          <button class="btn" id="profile-cancel">Annuler</button>
+        </div>
+      </div>
     </div>
 
     <!-- LOGS -->
     <div class="card section-gap">
       <h2>Logs en direct</h2>
       <div class="logs-box" id="logs-box"></div>
+    </div>
+
+    <!-- FAILURES -->
+    <div class="card section-gap" id="failures-card" style="display:none">
+      <div class="toggle-row" style="margin-bottom:1rem">
+        <h2 style="margin:0">Images en erreur</h2>
+        <button class="btn btn-primary" id="retry-all-failures">Tout réessayer</button>
+      </div>
+      <div id="failures-container"></div>
     </div>
 
     <!-- HISTORY -->
@@ -781,11 +931,13 @@
       }
     }
 
+    let currentConfig = null;
+
     async function loadConfig() {
-      const cfg = await api('GET', '/api/config');
-      $('#cfg-platform').value = cfg.platform;
-      $('#cfg-language').value = cfg.language;
-      if (cfg.model) $('#cfg-model').value = cfg.model;
+      currentConfig = await api('GET', '/api/config');
+      $('#cfg-language').value = currentConfig.language;
+      if (currentConfig.model) $('#cfg-model').value = currentConfig.model;
+      $('#cfg-default-profile').value = currentConfig.defaultProfileId || '';
     }
 
     function envIndicator(set, masked) {
@@ -796,14 +948,134 @@
     async function loadEnv() {
       const env = await api('GET', '/api/env');
       $('#st-anthropic').innerHTML = envIndicator(env.anthropic.set, env.anthropic.masked);
-      if (env.wp.url) $('#env-wp-url').value = env.wp.url;
-      $('#st-wp-url').innerHTML = envIndicator(env.wp.urlSet, env.wp.url);
-      $('#st-wp-user').innerHTML = envIndicator(env.wp.userSet, env.wp.userMasked);
-      $('#st-wp-pass').innerHTML = envIndicator(env.wp.passSet, '');
-      if (env.shopify.store) $('#env-shopify-store').value = env.shopify.store;
-      $('#st-shopify-store').innerHTML = envIndicator(env.shopify.storeSet, env.shopify.store);
-      $('#st-shopify-token').innerHTML = envIndicator(env.shopify.tokenSet, env.shopify.tokenMasked);
+      $('#st-gemini').innerHTML = envIndicator(env.gemini.set, env.gemini.masked);
     }
+
+    // Destinations (profils WordPress/Shopify)
+    let profiles = [];
+
+    function profileLabel(p) {
+      const platform = p.platform === 'wordpress' ? 'WordPress' : 'Shopify';
+      const target = p.platform === 'wordpress' ? (p.wp?.siteUrl || '') : (p.shopify?.store || '');
+      return `${p.name} (${platform}${target ? ' — ' + target : ''})`;
+    }
+
+    function populateDestinationSelects() {
+      const options = '<option value="">Aucune (local)</option>' +
+        profiles.map((p) => `<option value="${esc(p.id)}">${esc(profileLabel(p))}</option>`).join('');
+      const cfgSel = $('#cfg-default-profile');
+      const uploadSel = $('#upload-destination');
+      const cfgPrev = cfgSel.value;
+      const uploadPrev = uploadSel.value || localStorage.getItem('uploadDestination') || '';
+      cfgSel.innerHTML = options;
+      uploadSel.innerHTML = options;
+      cfgSel.value = (currentConfig?.defaultProfileId) || cfgPrev || '';
+      uploadSel.value = profiles.some((p) => p.id === uploadPrev) ? uploadPrev : '';
+    }
+
+    function renderProfilesList() {
+      const container = $('#profiles-list');
+      if (!profiles.length) {
+        container.innerHTML = '<div class="empty-state">Aucune destination enregistrée</div>';
+        return;
+      }
+      container.innerHTML = profiles.map((p) => {
+        const platform = p.platform === 'wordpress' ? 'WordPress' : 'Shopify';
+        const detail = p.platform === 'wordpress'
+          ? (p.wp?.siteUrl || '')
+          : (p.shopify?.store || '');
+        return `<div class="profile-row" data-id="${esc(p.id)}">
+          <div class="profile-info">
+            <span class="badge badge-accent">${platform}</span>
+            <span class="profile-name">${esc(p.name)}</span>
+            <span class="profile-detail">${esc(detail)}</span>
+          </div>
+          <div class="profile-actions">
+            <button class="btn profile-edit" data-id="${esc(p.id)}">Modifier</button>
+            <button class="btn profile-delete" data-id="${esc(p.id)}" style="border-color:var(--red);color:var(--red)">Supprimer</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      container.querySelectorAll('.profile-edit').forEach((btn) => {
+        btn.addEventListener('click', () => openProfileForm(profiles.find((p) => p.id === btn.dataset.id)));
+      });
+      container.querySelectorAll('.profile-delete').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const p = profiles.find((pr) => pr.id === btn.dataset.id);
+          if (!confirm(`Supprimer la destination "${p?.name}" ?`)) return;
+          await api('DELETE', `/api/profiles/${btn.dataset.id}`);
+          await loadProfiles();
+        });
+      });
+    }
+
+    async function loadProfiles() {
+      profiles = await api('GET', '/api/profiles');
+      renderProfilesList();
+      populateDestinationSelects();
+    }
+
+    function toggleProfilePlatformFields() {
+      const platform = $('#profile-platform').value;
+      $('#profile-fields-wordpress').style.display = platform === 'wordpress' ? '' : 'none';
+      $('#profile-fields-shopify').style.display = platform === 'shopify' ? '' : 'none';
+    }
+
+    function openProfileForm(profile) {
+      $('#profile-form').style.display = '';
+      $('#profile-id').value = profile?.id || '';
+      $('#profile-name').value = profile?.name || '';
+      $('#profile-platform').value = profile?.platform || 'shopify';
+      $('#profile-wp-url').value = profile?.wp?.siteUrl || '';
+      $('#profile-wp-user').value = profile?.wp?.username || '';
+      $('#profile-wp-pass').value = '';
+      $('#profile-shopify-store').value = profile?.shopify?.store || '';
+      $('#profile-shopify-token').value = '';
+      toggleProfilePlatformFields();
+      $('#profile-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeProfileForm() {
+      $('#profile-form').style.display = 'none';
+    }
+
+    $('#add-profile-btn').addEventListener('click', () => openProfileForm(null));
+    $('#profile-cancel').addEventListener('click', closeProfileForm);
+    $('#profile-platform').addEventListener('change', toggleProfilePlatformFields);
+
+    $('#profile-save').addEventListener('click', async () => {
+      const id = $('#profile-id').value;
+      const name = $('#profile-name').value.trim();
+      const platform = $('#profile-platform').value;
+      if (!name) { alert('Le nom est requis'); return; }
+
+      const body = { name, platform };
+      if (platform === 'wordpress') {
+        body.wp = {
+          siteUrl: $('#profile-wp-url').value.trim(),
+          username: $('#profile-wp-user').value.trim(),
+        };
+        const pass = $('#profile-wp-pass').value;
+        if (pass) body.wp.appPassword = pass;
+      } else {
+        body.shopify = { store: $('#profile-shopify-store').value.trim() };
+        const token = $('#profile-shopify-token').value;
+        if (token) body.shopify.accessToken = token;
+      }
+
+      if (id) {
+        await api('PUT', `/api/profiles/${id}`, body);
+      } else {
+        await api('POST', '/api/profiles', body);
+      }
+      closeProfileForm();
+      await loadProfiles();
+    });
+
+    $('#upload-destination').addEventListener('change', (e) => {
+      localStorage.setItem('uploadDestination', e.target.value);
+    });
 
     const deletedFiles = new Set();
 
@@ -835,6 +1107,59 @@
       container.innerHTML = html;
     }
 
+    async function loadFailures() {
+      const failures = await api('GET', '/api/failures');
+      const card = $('#failures-card');
+      const container = $('#failures-container');
+      card.style.display = failures.length ? '' : 'none';
+      if (!failures.length) return;
+
+      container.innerHTML = failures.map((f) => {
+        const date = new Date(f.date).toLocaleString('fr-FR');
+        return `<div class="failure-row" data-id="${esc(f.id)}">
+          <div class="failure-info">
+            <div class="failure-name">${esc(f.displayName)}</div>
+            <div class="failure-error" title="${esc(f.error)}">${esc(f.error)} — ${date}</div>
+          </div>
+          <div class="failure-actions">
+            <button class="btn failure-retry" data-id="${esc(f.id)}">Réessayer</button>
+            <button class="btn failure-dismiss" data-id="${esc(f.id)}" style="border-color:var(--red);color:var(--red)">Ignorer</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      container.querySelectorAll('.failure-retry').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = '…';
+          const profileId = $('#upload-destination').value;
+          await api('POST', `/api/failures/${btn.dataset.id}/retry`, profileId ? { profileId } : {});
+          await loadFailures();
+          await loadHistory();
+          await refreshStatus();
+        });
+      });
+      container.querySelectorAll('.failure-dismiss').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          await api('DELETE', `/api/failures/${btn.dataset.id}`);
+          await loadFailures();
+        });
+      });
+    }
+
+    $('#retry-all-failures').addEventListener('click', async () => {
+      const btn = $('#retry-all-failures');
+      btn.disabled = true;
+      btn.textContent = 'Réessai en cours…';
+      const profileId = $('#upload-destination').value;
+      await api('POST', '/api/failures/retry-all', profileId ? { profileId } : {});
+      btn.disabled = false;
+      btn.textContent = 'Tout réessayer';
+      await loadFailures();
+      await loadHistory();
+      await refreshStatus();
+    });
+
     function esc(s) {
       const d = document.createElement('div');
       d.textContent = s;
@@ -844,9 +1169,9 @@
     // Config save
     $('#cfg-save').addEventListener('click', async () => {
       await api('PUT', '/api/config', {
-        platform: $('#cfg-platform').value,
         language: $('#cfg-language').value,
         model: $('#cfg-model').value,
+        defaultProfileId: $('#cfg-default-profile').value || null,
       });
       await loadConfig();
     });
@@ -855,21 +1180,13 @@
     $('#env-save').addEventListener('click', async () => {
       const body = {};
       const ak = $('#env-anthropic').value;
-      const wu = $('#env-wp-url').value;
-      const wpUser = $('#env-wp-user').value;
-      const wpPass = $('#env-wp-pass').value;
-      const ss = $('#env-shopify-store').value;
-      const st = $('#env-shopify-token').value;
+      const gk = $('#env-gemini').value;
       if (ak) body.ANTHROPIC_API_KEY = ak;
-      if (wu) body.WP_SITE_URL = wu;
-      if (wpUser) body.WP_APP_USERNAME = wpUser;
-      if (wpPass) body.WP_APP_PASSWORD = wpPass;
-      if (ss) body.SHOPIFY_STORE = ss;
-      if (st) body.SHOPIFY_ACCESS_TOKEN = st;
+      if (gk) body.GEMINI_API_KEY = gk;
+      if (!Object.keys(body).length) return;
       await api('PUT', '/api/env', body);
       $('#env-anthropic').value = '';
-      $('#env-wp-pass').value = '';
-      $('#env-shopify-token').value = '';
+      $('#env-gemini').value = '';
       await loadEnv();
     });
 
@@ -906,42 +1223,92 @@
     // Upload
     const dropZone = $('#drop-zone');
     const fileInput = $('#file-input');
+    const folderInput = $('#folder-input');
     const progressBox = $('#upload-progress');
+    const IMAGE_EXT_RE = /\.(jpe?g|png|webp|avif|gif)$/i;
+    const UPLOAD_CONCURRENCY = 4;
 
+    $('#select-files-link').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); fileInput.click(); });
+    $('#select-folder-link').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); folderInput.click(); });
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', (e) => {
+    dropZone.addEventListener('drop', async (e) => {
       e.preventDefault();
       dropZone.classList.remove('dragover');
-      if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+      const items = e.dataTransfer.items;
+      if (items && items.length && items[0].webkitGetAsEntry) {
+        const entries = Array.from(items).map((it) => it.webkitGetAsEntry()).filter(Boolean);
+        const files = await collectFilesFromEntries(entries);
+        if (files.length) uploadFiles(files);
+      } else if (e.dataTransfer.files.length) {
+        uploadFiles(toEntryList(e.dataTransfer.files));
+      }
     });
     fileInput.addEventListener('change', () => {
-      if (fileInput.files.length) uploadFiles(fileInput.files);
+      if (fileInput.files.length) uploadFiles(toEntryList(fileInput.files));
       fileInput.value = '';
     });
+    folderInput.addEventListener('change', () => {
+      if (folderInput.files.length) uploadFiles(toEntryList(folderInput.files));
+      folderInput.value = '';
+    });
 
-    async function uploadFiles(files) {
-      const items = Array.from(files).map((f) => ({
-        name: f.name, status: 'pending',
+    // Normalise une FileList en [{file, relativePath}], en filtrant les non-images
+    function toEntryList(fileList) {
+      return Array.from(fileList)
+        .filter((f) => IMAGE_EXT_RE.test(f.name))
+        .map((f) => ({ file: f, relativePath: f.webkitRelativePath || f.name }));
+    }
+
+    // Parcourt récursivement les entrées glissées-déposées (fichiers ET dossiers,
+    // sur autant de niveaux de sous-dossiers que nécessaire) via l'API FileSystemEntry
+    async function collectFilesFromEntries(entries) {
+      const out = [];
+      async function walk(entry) {
+        if (entry.isFile) {
+          if (!IMAGE_EXT_RE.test(entry.name)) return;
+          const file = await new Promise((res, rej) => entry.file(res, rej));
+          out.push({ file, relativePath: entry.fullPath.replace(/^\//, '') });
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const readAllEntries = () => new Promise((res, rej) => reader.readEntries(res, rej));
+          let batch;
+          do {
+            batch = await readAllEntries();
+            for (const child of batch) await walk(child);
+          } while (batch.length > 0);
+        }
+      }
+      for (const entry of entries) await walk(entry);
+      return out;
+    }
+
+    async function uploadFiles(entries) {
+      const items = entries.map((e) => ({
+        name: e.relativePath, status: 'pending',
       }));
       renderProgress(items);
 
       const customPrompt = $('#custom-prompt').value.trim();
+      const profileId = $('#upload-destination').value;
 
-      items.forEach((i) => { i.status = 'uploading'; });
-      renderProgress(items);
+      async function uploadOne(i) {
+        const { file, relativePath } = entries[i];
+        items[i].status = 'uploading';
+        renderProgress(items);
 
-      await Promise.all(Array.from(files).map(async (file, i) => {
         const formData = new FormData();
         formData.append('files', file);
+        formData.append('relativePath', relativePath);
         if (customPrompt) formData.append('customPrompt', customPrompt);
+        if (profileId) formData.append('profileId', profileId);
 
         try {
           const res = await fetch('/api/upload', { method: 'POST', body: formData });
           const data = await res.json();
           const result = data.results?.[0];
-          items[i].status = result?.status === 'ok' ? 'ok' : 'error';
+          items[i].status = result?.status || 'error';
           if (result?.error) items[i].error = result.error;
         } catch (err) {
           items[i].status = 'error';
@@ -950,27 +1317,52 @@
 
         renderProgress(items);
         refreshStatus();
-      }));
+      }
+
+      // Upload avec concurrence limitée pour rester fluide sur de gros dossiers
+      let next = 0;
+      async function worker() {
+        while (next < entries.length) {
+          const i = next++;
+          await uploadOne(i);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, entries.length) }, worker));
 
       await loadHistory();
+      await loadFailures();
     }
 
     function renderProgress(items) {
-      progressBox.innerHTML = items.map((i) => {
-        const cls = i.status === 'ok' ? 'status-ok' : i.status === 'error' ? 'status-err' : 'status-pending';
-        const icon = i.status === 'ok' ? '✓' : i.status === 'error' ? '✗' : '…';
-        const suffix = i.error ? ` — ${esc(i.error)}` : '';
+      const isDone = (i) => i.status === 'ok' || i.status === 'skipped';
+      const summary = items.length > 30
+        ? `<div class="file-item">${items.filter(isDone).length} / ${items.length} traité(s)</div>`
+        : '';
+      const list = items.length > 30 ? items.filter((i) => !isDone(i)) : items;
+      const STATUS_MAP = {
+        ok: ['status-ok', '✓'],
+        error: ['status-err', '✗'],
+        skipped: ['status-skip', '⏭'],
+      };
+      progressBox.innerHTML = summary + list.map((i) => {
+        const [cls, icon] = STATUS_MAP[i.status] || ['status-pending', '…'];
+        const suffix = i.error ? ` — ${esc(i.error)}` : i.status === 'skipped' ? ' — déjà traité' : '';
         return `<div class="file-item"><span class="${cls}">${icon}</span> ${esc(i.name)}${suffix}</div>`;
       }).join('');
     }
 
     // Init
-    loadConfig();
+    (async () => {
+      await loadConfig();
+      await loadProfiles();
+    })();
     loadEnv();
     loadHistory();
+    loadFailures();
     refreshStatus();
     setInterval(refreshStatus, 2000);
     setInterval(loadHistory, 10000);
+    setInterval(loadFailures, 10000);
   </script>
 </body>
 

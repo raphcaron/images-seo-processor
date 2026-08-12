@@ -1,40 +1,47 @@
 import { readFileSync } from 'fs';
 import { basename } from 'path';
+import { withRetry } from './retry.js';
 
-export async function uploadToWordPress(filePath, altText) {
-  const { WP_SITE_URL, WP_APP_USERNAME, WP_APP_PASSWORD } = process.env;
+export async function uploadToWordPress(filePath, altText, wpCreds) {
+  const siteUrl = wpCreds?.siteUrl;
+  const username = wpCreds?.username;
+  const appPassword = wpCreds?.appPassword;
 
-  if (!WP_SITE_URL || !WP_APP_USERNAME || !WP_APP_PASSWORD) {
-    console.error('    ⚠ WordPress: variables .env manquantes, upload ignoré');
+  if (!siteUrl || !username || !appPassword) {
+    console.error('    ⚠ WordPress: destination sans identifiants complets, upload ignoré');
     return;
   }
 
   const fileData = readFileSync(filePath);
   const filename = basename(filePath);
-  const credentials = Buffer.from(`${WP_APP_USERNAME}:${WP_APP_PASSWORD}`).toString('base64');
+  const credentials = Buffer.from(`${username}:${appPassword}`).toString('base64');
 
   console.log(`    [→] Upload WordPress...`);
 
-  const formData = new FormData();
-  formData.append('file', new Blob([fileData]), filename);
+  const media = await withRetry(async () => {
+    const formData = new FormData();
+    formData.append('file', new Blob([fileData]), filename);
 
-  const uploadRes = await fetch(`${WP_SITE_URL}/wp-json/wp/v2/media`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-    },
-    body: formData,
+    const uploadRes = await fetch(`${siteUrl}/wp-json/wp/v2/media`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${credentials}`,
+      },
+      body: formData,
+    });
+
+    if (!uploadRes.ok) {
+      const body = await uploadRes.text();
+      const err = new Error(`WordPress upload (${uploadRes.status}): ${body.slice(0, 300)}`);
+      err.status = uploadRes.status;
+      throw err;
+    }
+
+    return uploadRes.json();
   });
 
-  if (!uploadRes.ok) {
-    const body = await uploadRes.text();
-    throw new Error(`WordPress upload (${uploadRes.status}): ${body}`);
-  }
-
-  const media = await uploadRes.json();
-
   if (altText) {
-    const altRes = await fetch(`${WP_SITE_URL}/wp-json/wp/v2/media/${media.id}`, {
+    const altRes = await fetch(`${siteUrl}/wp-json/wp/v2/media/${media.id}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,

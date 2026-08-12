@@ -4,9 +4,17 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renam
 import { join, extname, basename, resolve } from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { processImage } from './analyzer.js';
+import { processImage, retryUpload } from './analyzer.js';
 import { startWatcher, stopWatcher } from './watcher.js';
+import { readCsvRows, readAllHistory } from './csv-writer.js';
 import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
+import {
+  loadProfiles, getProfile, createProfile, updateProfile, deleteProfile,
+  maskProfile, migrateLegacyEnvProfile,
+} from './profiles.js';
+import {
+  loadFailures, getFailure, recordFailure, removeFailure, updateFailureError, maskFailure,
+} from './failures.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -15,6 +23,15 @@ export function createServer(config) {
   const app = express();
   app.use(express.json());
 
+  const migrated = migrateLegacyEnvProfile(ROOT, config);
+  if (migrated) {
+    if (!config.defaultProfileId) {
+      config.defaultProfileId = migrated.id;
+      writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
+    }
+    addLog('info', `Profil migré depuis .env: "${migrated.name}"`);
+  }
+
   app.use('/output', express.static(join(ROOT, config.outputDir)));
   app.use(express.static(join(__dirname, 'public')));
 
@@ -22,15 +39,19 @@ export function createServer(config) {
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => cb(null, join(ROOT, config.inputDir)),
       filename: (_req, file, cb) => {
+        // Prefixe unique pour éviter les collisions quand un dossier entier
+        // (avec sous-dossiers) est uploadé et que plusieurs fichiers portent
+        // le même nom (ex: IMG_1234.jpg dans deux catégories différentes).
         const ext = extname(file.originalname);
-        const name = basename(file.originalname, ext);
-        cb(null, `${name}${ext}`);
+        const name = basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_');
+        const unique = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        cb(null, `${unique}-${name}${ext}`);
       },
     }),
     limits: { fileSize: 20 * 1024 * 1024 },
   });
 
-  startWatcher(config);
+  startWatcher(config, ROOT);
 
   function countHistory() {
     const csvPath = join(ROOT, config.outputDir, 'alt-texts.csv');
@@ -58,52 +79,183 @@ export function createServer(config) {
     if (req.body.platform !== undefined) config.platform = req.body.platform;
     if (req.body.language !== undefined) config.language = req.body.language;
     if (req.body.model !== undefined) config.model = req.body.model;
+    if (req.body.defaultProfileId !== undefined) config.defaultProfileId = req.body.defaultProfileId;
     writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
     addLog('info', `Config: platform=${config.platform}, language=${config.language}`);
     res.json(config);
   });
 
+  // Destinations (profils WordPress/Shopify sauvegardés)
+  app.get('/api/profiles', (_req, res) => {
+    res.json(loadProfiles(ROOT).map(maskProfile));
+  });
+
+  app.post('/api/profiles', (req, res) => {
+    const { name, platform, wp, shopify } = req.body;
+    if (!name || !['wordpress', 'shopify'].includes(platform)) {
+      return res.status(400).json({ error: 'name et platform (wordpress|shopify) requis' });
+    }
+    const profile = createProfile(ROOT, { name, platform, wp, shopify });
+    addLog('success', `Destination créée: "${profile.name}"`);
+    res.json(maskProfile(profile));
+  });
+
+  app.put('/api/profiles/:id', (req, res) => {
+    const profile = updateProfile(ROOT, req.params.id, req.body);
+    if (!profile) return res.status(404).json({ error: 'Profil introuvable' });
+    addLog('info', `Destination mise à jour: "${profile.name}"`);
+    res.json(maskProfile(profile));
+  });
+
+  app.delete('/api/profiles/:id', (req, res) => {
+    const profile = getProfile(ROOT, req.params.id);
+    const ok = deleteProfile(ROOT, req.params.id);
+    if (ok && profile) addLog('info', `Destination supprimée: "${profile.name}"`);
+    if (config.defaultProfileId === req.params.id) {
+      config.defaultProfileId = null;
+      writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
+    }
+    res.json({ ok });
+  });
+
   app.get('/api/history', (_req, res) => {
-    const csvPath = join(ROOT, config.outputDir, 'alt-texts.csv');
-    if (!existsSync(csvPath)) return res.json([]);
+    res.json(readCsvRows(config.outputDir).reverse());
+  });
 
-    const lines = readFileSync(csvPath, 'utf-8').trim().split('\n').slice(1);
-    const history = lines
-      .map((line) => {
-        const match = line.match(/^"([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)"$/);
-        if (!match) return null;
-        return {
-          original: match[1],
-          filename: match[2],
-          alt_text: match[3],
-          keywords: match[4],
-          date: match[5],
-        };
-      })
-      .filter(Boolean);
+  // Images dont l'analyse IA a échoué (ex: crédits épuisés) — gardées de
+  // côté pour être retentées depuis l'interface sans reglisser le dossier.
+  app.get('/api/failures', (_req, res) => {
+    res.json(loadFailures(config.outputDir).map(maskFailure).reverse());
+  });
 
-    res.json(history.reverse());
+  app.post('/api/failures/:id/retry', async (req, res) => {
+    const failure = getFailure(config, req.params.id);
+    if (!failure) return res.status(404).json({ error: 'Introuvable' });
+
+    const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
+    try {
+      const r = await queue.add(() => processImage(failure.savedPath, config, '', failure.displayName, destination));
+      removeFailure(config, failure.id);
+      if (r?.uploadStatus === 'failed') {
+        state.errors++;
+        return res.json({ ok: true, status: 'error', error: r.uploadError });
+      }
+      res.json({ ok: true, status: 'ok' });
+    } catch (err) {
+      updateFailureError(config, failure.id, err);
+      addLog('error', `Nouvel essai échoué (${failure.displayName}): ${err.message}`);
+      res.json({ ok: false, status: 'error', error: err.message });
+    }
+  });
+
+  app.post('/api/failures/retry-all', async (req, res) => {
+    const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
+    const failures = loadFailures(config.outputDir);
+    const results = [];
+    for (const failure of failures) {
+      try {
+        const r = await queue.add(() => processImage(failure.savedPath, config, '', failure.displayName, destination));
+        removeFailure(config, failure.id);
+        results.push({ displayName: failure.displayName, status: r?.uploadStatus === 'failed' ? 'error' : 'ok' });
+      } catch (err) {
+        updateFailureError(config, failure.id, err);
+        addLog('error', `Nouvel essai échoué (${failure.displayName}): ${err.message}`);
+        results.push({ displayName: failure.displayName, status: 'error', error: err.message });
+      }
+    }
+    res.json({ ok: true, results });
+  });
+
+  app.delete('/api/failures/:id', (req, res) => {
+    const failure = removeFailure(config, req.params.id);
+    if (failure) addLog('info', `Échec ignoré: ${failure.displayName}`);
+    res.json({ ok: !!failure });
   });
 
   app.post('/api/upload', upload.array('files', 20), async (req, res) => {
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
 
     const customPrompt = req.body.customPrompt || '';
+    // Chemin relatif (ex: "Drainage/Nettoyage de drain/IMG_0723.webp") envoyé
+    // par le client lors d'un upload de dossier, pour garder trace de
+    // l'origine dans les logs/CSV même si le fichier est aplati sur disque.
+    const relativePath = req.body.relativePath || '';
+    const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
 
-    for (const file of req.files) {
-      doneFiles.add(resolve(file.path));
-      processingFiles.add(file.path);
-    }
+    // Reprise: si un dossier a déjà été (partiellement) traité — ex: crédits
+    // Anthropic épuisés en cours de route, destination indisponible, ou même
+    // un "Effacer l'historique" survenu entre-temps — on ne refait pas ce
+    // qui est déjà acquis. On cherche dans le CSV actif ET les archives
+    // backups/, car un clear d'historique déplace les lignes déjà traitées
+    // dans une archive sans effacer le travail qu'elles représentent.
+    const history = readAllHistory(config.outputDir);
+    const lastByOriginal = new Map();
+    for (const row of history) lastByOriginal.set(row.original, row); // le dernier gagne (ordre chronologique)
 
     const results = [];
     for (const file of req.files) {
+      const displayName = relativePath || file.originalname;
+      doneFiles.add(resolve(file.path));
+      const existing = lastByOriginal.get(displayName);
+
+      if (existing && (existing.upload_status !== 'failed' || !destination)) {
+        // Déjà analysé, et soit le statut d'envoi n'est PAS explicitement
+        // "failed" ('ok' = déjà envoyé, 'none' = aucun envoi demandé alors,
+        // 'unknown' = ligne d'avant le suivi des envois), soit aucun envoi
+        // n'est demandé cette fois — dans tous ces cas on NE retente PAS
+        // l'envoi automatiquement, pour ne pas créer de doublons sur
+        // WordPress/Shopify quand l'envoi avait en réalité déjà réussi
+        // (cas le plus fréquent pour les lignes 'unknown'). Seul un statut
+        // 'failed' explicite (confirmé après mon correctif) avec une
+        // destination sélectionnée déclenche un nouvel essai ci-dessous.
+        unlinkSync(file.path);
+        addLog('info', `Ignoré (déjà traité): ${displayName}`);
+        results.push({ original: file.originalname, status: 'skipped' });
+        continue;
+      }
+
+      if (existing && destination) {
+        // existing.upload_status === 'failed' ici: échec confirmé, sûr à retenter.
+        try {
+          const r = await queue.add(() => retryUpload(displayName, config, destination));
+          if (r.found) {
+            unlinkSync(file.path);
+            if (r.uploadStatus === 'failed') {
+              state.errors++;
+              results.push({ original: file.originalname, status: 'error', error: r.uploadError });
+            } else {
+              results.push({ original: file.originalname, status: 'ok' });
+            }
+            continue;
+          }
+          // Fichier de sortie introuvable (ex: "Supprimer fichiers" a été
+          // utilisé) — on retombe sur une analyse complète ci-dessous.
+        } catch (err) {
+          state.errors++;
+          addLog('error', `Erreur ${displayName}: ${err.message}`);
+          results.push({ original: file.originalname, status: 'error', error: err.message });
+          continue;
+        }
+      }
+
+      processingFiles.add(file.path);
       try {
-        await queue.add(() => processImage(file.path, config, customPrompt));
-        results.push({ original: file.originalname, status: 'ok' });
+        const r = await queue.add(() => processImage(file.path, config, customPrompt, displayName, destination));
+        if (r?.uploadStatus === 'failed') {
+          results.push({ original: file.originalname, status: 'error', error: r.uploadError });
+        } else {
+          results.push({ original: file.originalname, status: 'ok' });
+        }
       } catch (err) {
         state.errors++;
-        addLog('error', `Erreur ${file.originalname}: ${err.message}`);
+        addLog('error', `Erreur ${displayName}: ${err.message}`);
         results.push({ original: file.originalname, status: 'error', error: err.message });
+        // L'échec (ex: crédits épuisés) survient avant le renommage vers
+        // output/ — on garde le fichier dans une file d'attente persistante
+        // pour pouvoir le retenter depuis l'interface, plutôt que de le
+        // supprimer (ce qui obligerait à retrouver et reglisser le dossier
+        // source pour retraiter cette image).
+        if (existsSync(file.path)) recordFailure(config, file.path, displayName, err);
       } finally {
         processingFiles.delete(file.path);
       }
@@ -115,7 +267,7 @@ export function createServer(config) {
     if (state.watcherActive) {
       await stopWatcher();
     } else {
-      startWatcher(config);
+      startWatcher(config, ROOT);
     }
     res.json({ active: state.watcherActive });
   });
@@ -124,19 +276,7 @@ export function createServer(config) {
     const mask = (v) => (v && v.length > 10 ? v.slice(0, 6) + '***' + v.slice(-4) : v ? '***' : '');
     res.json({
       anthropic: { set: !!process.env.ANTHROPIC_API_KEY, masked: mask(process.env.ANTHROPIC_API_KEY) },
-      wp: {
-        url: process.env.WP_SITE_URL || '',
-        urlSet: !!process.env.WP_SITE_URL,
-        userSet: !!process.env.WP_APP_USERNAME,
-        userMasked: mask(process.env.WP_APP_USERNAME),
-        passSet: !!process.env.WP_APP_PASSWORD,
-      },
-      shopify: {
-        store: process.env.SHOPIFY_STORE || '',
-        storeSet: !!process.env.SHOPIFY_STORE,
-        tokenSet: !!process.env.SHOPIFY_ACCESS_TOKEN,
-        tokenMasked: mask(process.env.SHOPIFY_ACCESS_TOKEN),
-      },
+      gemini: { set: !!process.env.GEMINI_API_KEY, masked: mask(process.env.GEMINI_API_KEY) },
     });
   });
 

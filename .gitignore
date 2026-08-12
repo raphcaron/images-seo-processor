@@ -1,7 +1,9 @@
 node_modules/
 .env
+profiles.json
 output/*.csv
 output/*.*
 input/*.*
+input/failed/*.*
 !input/.gitkeep
 !output/.gitkeep

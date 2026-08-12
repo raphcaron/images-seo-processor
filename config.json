@@ -3,6 +3,7 @@
   "outputDir": "./output",
   "platform": "shopify",
   "language": "fr",
-  "model": "claude-opus-4-8",
-  "shopifyApiVersion": "2025-01"
+  "model": "local:qwen3-vl:4b-instruct",
+  "shopifyApiVersion": "2025-01",
+  "defaultProfileId": "86aed626-bcf4-4443-85de-f35b7a2807e6"
 }

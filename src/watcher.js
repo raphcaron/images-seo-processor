@@ -1,6 +1,7 @@
 import { watch as chokidarWatch } from 'chokidar';
 import { extname, resolve } from 'path';
 import { processImage } from './analyzer.js';
+import { getProfile } from './profiles.js';
 import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -9,7 +10,7 @@ const SUPPORTED_EXTENSIONS = new Set([
 
 let watcherInstance = null;
 
-export function startWatcher(config) {
+export function startWatcher(config, rootDir) {
   if (watcherInstance) return;
 
   const inputDir = config.inputDir || './input';
@@ -31,7 +32,8 @@ export function startWatcher(config) {
 
     addLog('info', `Image détectée: ${filePath}`);
 
-    queue.add(() => processImage(resolved, config)).catch((err) => {
+    const destination = config.defaultProfileId ? getProfile(rootDir, config.defaultProfileId) : null;
+    queue.add(() => processImage(resolved, config, '', '', destination)).catch((err) => {
       addLog('error', `Erreur ${filePath}: ${err.message}`);
       state.errors++;
     });

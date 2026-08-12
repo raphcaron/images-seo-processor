@@ -7,10 +7,12 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
-    "chokidar": "^4.0.3",
     "@anthropic-ai/sdk": "^0.52.0",
+    "@google/genai": "^2.16.0",
+    "chokidar": "^4.0.3",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "multer": "^2.1.1"
+    "multer": "^2.1.1",
+    "sharp": "^0.35.3"
   }
 }
