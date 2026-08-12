@@ -76,10 +76,6 @@ export function deleteProfile(rootDir, id) {
   return next.length !== profiles.length;
 }
 
-function maskSecret(v) {
-  return v && v.length > 10 ? v.slice(0, 6) + '***' + v.slice(-4) : v ? '***' : '';
-}
-
 export function maskProfile(p) {
   const base = { id: p.id, name: p.name, platform: p.platform };
   if (p.platform === 'wordpress') {
@@ -93,7 +89,6 @@ export function maskProfile(p) {
       store: p.shopify?.store || '',
       apiVersion: p.shopify?.apiVersion || '2025-01',
       tokenSet: !!p.shopify?.accessToken,
-      tokenMasked: maskSecret(p.shopify?.accessToken),
     };
   }
   return base;

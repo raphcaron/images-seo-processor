@@ -8,9 +8,11 @@ Outil web de traitement SEO d'images alimenté par IA. Analyse, renomme et optim
 - Upload par drag-and-drop (fichiers ou dossier entier avec sous-dossiers) ou surveillance automatique d'un dossier
 - Prompt personnalisable pour guider l'analyse de chaque lot d'images
 - Destinations multiples sauvegardées (plusieurs sites WordPress et/ou stores Shopify), sélectionnables au moment de l'upload
+- Reprise automatique des envois interrompus (ex: crédits IA épuisés en cours de traitement) et nouvel essai des envois réseau échoués (5xx, timeout)
+- Fichiers en échec d'analyse conservés dans `input/failed/` et retentables depuis l'interface, sans avoir à reglisser le dossier source
 - Historique des traitements avec export CSV
 - Interface web avec thème sombre/clair
-- Gestion des clés API depuis l'interface
+- Gestion des clés API et des identifiants de destination depuis l'interface — jamais renvoyés en clair une fois enregistrés
 
 ## Installation
 
@@ -66,7 +68,9 @@ Ensuite, sélectionne "Qwen3-VL (local)" dans le menu "Modèle IA" de l'interfac
 
 ### 2. Destinations WordPress / Shopify
 
-Les identifiants WordPress et Shopify ne se configurent plus via `.env` mais depuis la carte **Destinations** de l'interface : chaque destination est un profil nommé (ex: "Client A — Shopify") avec sa propre plateforme et ses propres identifiants. Ils sont stockés localement dans `profiles.json` (non versionné) et sélectionnables au moment de chaque upload, ou comme destination par défaut pour le dossier surveillé `input/`.
+Les identifiants WordPress et Shopify ne se configurent plus via `.env` mais depuis la carte **Destinations** de l'interface : chaque destination est un profil nommé (ex: "Client A — Shopify") avec sa propre plateforme et ses propres identifiants. Ils sont stockés localement dans `profiles.json` (non versionné, listé dans `.gitignore`) et sélectionnables au moment de chaque upload, ou comme destination par défaut pour le dossier surveillé `input/`.
+
+Ces identifiants ne quittent jamais le serveur en clair : l'API ne renvoie au navigateur que le nom, la plateforme et l'URL/domaine de chaque destination, plus un simple indicateur "identifiant configuré" (`passwordSet` / `tokenSet`) — jamais le mot de passe applicatif WordPress ni le token Shopify eux-mêmes. Modifier une destination existante nécessite de resaisir un nouvel identifiant ; le champ reste vide à l'ouverture du formulaire.
 
 ### 3. Configuration générale
 
@@ -120,16 +124,18 @@ JPG, PNG, WebP, AVIF, GIF (max 20 Mo par fichier)
 src/
 ├── index.js          # Point d'entrée
 ├── server.js         # Serveur Express + API
-├── analyzer.js       # Intégration Claude + pipeline de traitement
+├── analyzer.js       # Intégration Claude/Gemini/Ollama + pipeline de traitement
 ├── queue.js          # File d'attente séquentielle
 ├── state.js          # État partagé + logs
 ├── watcher.js        # Surveillance du dossier input/
 ├── profiles.js       # Gestion des destinations (profils WordPress/Shopify)
+├── failures.js       # Fichiers en échec d'analyse (input/failed/) + nouvel essai
 ├── renamer.js        # Renommage SEO des fichiers
-├── csv-writer.js     # Export CSV des résultats
+├── csv-writer.js     # Export CSV des résultats + historique/archives
 ├── uploader/
-│   ├── shopify.js    # Upload Shopify (GraphQL staged upload)
-│   └── wordpress.js  # Upload WordPress (REST API)
+│   ├── retry.js       # Nouvel essai des erreurs réseau transitoires (5xx, timeout)
+│   ├── shopify.js     # Upload Shopify (GraphQL staged upload)
+│   └── wordpress.js   # Upload WordPress (REST API)
 └── public/
     └── index.html    # Interface web
 ```
