@@ -83,7 +83,6 @@ export function createServer(config) {
     if (req.body.language !== undefined) config.language = req.body.language;
     if (req.body.model !== undefined) config.model = req.body.model;
     if (req.body.defaultProfileId !== undefined) config.defaultProfileId = req.body.defaultProfileId;
-    if (req.body.defaultPrompt !== undefined) config.defaultPrompt = req.body.defaultPrompt;
     writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
     addLog('info', `Config: platform=${config.platform}, language=${config.language}`);
     res.json(config);
@@ -95,11 +94,11 @@ export function createServer(config) {
   });
 
   app.post('/api/profiles', (req, res) => {
-    const { name, platform, wp, shopify } = req.body;
+    const { name, platform, wp, shopify, context } = req.body;
     if (!name || !['wordpress', 'shopify'].includes(platform)) {
       return res.status(400).json({ error: 'name et platform (wordpress|shopify) requis' });
     }
-    const profile = createProfile(ROOT, { name, platform, wp, shopify });
+    const profile = createProfile(ROOT, { name, platform, wp, shopify, context });
     addLog('success', `Destination créée: "${profile.name}"`);
     res.json(maskProfile(profile));
   });
@@ -170,7 +169,7 @@ export function createServer(config) {
 
     const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
     try {
-      const r = await queue.add(() => processImage(failure.savedPath, config, config.defaultPrompt || '', failure.displayName, destination));
+      const r = await queue.add(() => processImage(failure.savedPath, config, destination?.context || '', failure.displayName, destination));
       removeFailure(config, failure.id);
       if (r?.uploadStatus === 'failed') {
         state.errors++;
@@ -190,7 +189,7 @@ export function createServer(config) {
     const results = [];
     for (const failure of failures) {
       try {
-        const r = await queue.add(() => processImage(failure.savedPath, config, config.defaultPrompt || '', failure.displayName, destination));
+        const r = await queue.add(() => processImage(failure.savedPath, config, destination?.context || '', failure.displayName, destination));
         removeFailure(config, failure.id);
         results.push({ displayName: failure.displayName, status: r?.uploadStatus === 'failed' ? 'error' : 'ok' });
       } catch (err) {
@@ -218,12 +217,15 @@ export function createServer(config) {
   app.post('/api/upload', upload.array('files', 20), async (req, res) => {
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
 
-    const customPrompt = req.body.customPrompt || config.defaultPrompt || '';
     // Chemin relatif (ex: "Drainage/Nettoyage de drain/IMG_0723.webp") envoyé
     // par le client lors d'un upload de dossier, pour garder trace de
     // l'origine dans les logs/CSV même si le fichier est aplati sur disque.
     const relativePath = req.body.relativePath || '';
     const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
+    // Le contexte IA (entreprise, secteur, ton...) est associé à la
+    // destination — chaque site/store géré par l'app peut avoir un contexte
+    // différent — pas à la config globale.
+    const customPrompt = destination?.context || '';
     // Toggle "Forcer le retraitement" côté client: bypasse la détection de
     // doublon ci-dessous, pour retraiter/ré-uploader volontairement une image
     // déjà dans l'historique (ex: comparer un autre modèle IA sur la même

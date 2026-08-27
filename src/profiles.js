@@ -30,6 +30,7 @@ export function createProfile(rootDir, data) {
     id: randomUUID(),
     name: data.name,
     platform: data.platform,
+    context: data.context || '',
     wp: data.platform === 'wordpress' ? {
       siteUrl: data.wp?.siteUrl || '',
       username: data.wp?.username || '',
@@ -52,6 +53,7 @@ export function updateProfile(rootDir, id, data) {
   if (!profile) return null;
 
   if (data.name !== undefined) profile.name = data.name;
+  if (data.context !== undefined) profile.context = data.context;
 
   if (profile.platform === 'wordpress') {
     profile.wp = profile.wp || {};
@@ -77,7 +79,7 @@ export function deleteProfile(rootDir, id) {
 }
 
 export function maskProfile(p) {
-  const base = { id: p.id, name: p.name, platform: p.platform };
+  const base = { id: p.id, name: p.name, platform: p.platform, context: p.context || '' };
   if (p.platform === 'wordpress') {
     base.wp = {
       siteUrl: p.wp?.siteUrl || '',

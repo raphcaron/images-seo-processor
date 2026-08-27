@@ -40,7 +40,7 @@ export function startWatcher(config, rootDir) {
     addLog('info', `Image détectée: ${filePath}`);
 
     const destination = config.defaultProfileId ? getProfile(rootDir, config.defaultProfileId) : null;
-    queue.add(() => processImage(resolved, config, config.defaultPrompt || '', '', destination)).catch((err) => {
+    queue.add(() => processImage(resolved, config, destination?.context || '', '', destination)).catch((err) => {
       addLog('error', `Erreur ${filePath}: ${err.message}`);
       state.errors++;
     });

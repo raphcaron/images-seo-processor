@@ -825,8 +825,12 @@
           </select>
         </div>
         <div class="field">
-          <label>Contexte pour l'IA (entreprise, secteur, ton...)</label>
-          <textarea id="cfg-default-prompt" rows="3" placeholder="Ex: Images pour une entreprise de distribution de matériel de plomberie et électrique."></textarea>
+          <label>Contexte pour l'IA (destination par défaut)</label>
+          <div style="display:flex;gap:.5rem;align-items:flex-start">
+            <textarea id="cfg-context-preview" rows="3" disabled style="flex:1;opacity:.7"></textarea>
+            <button class="btn" id="cfg-context-edit">Modifier</button>
+          </div>
+          <p class="hint" style="margin-top:.35rem">Le contexte (entreprise, secteur, ton...) est associé à chaque destination, pas à la config globale — il se modifie depuis sa fiche dans "Destinations" ci-dessous.</p>
         </div>
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
           <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
@@ -925,6 +929,10 @@
               <option value="wordpress">WordPress</option>
             </select>
           </div>
+        </div>
+        <div class="field">
+          <label>Contexte pour l'IA (entreprise, secteur, ton...)</label>
+          <textarea id="profile-context" rows="3"></textarea>
         </div>
         <div id="profile-fields-wordpress" style="display:none">
           <div class="field">
@@ -1072,7 +1080,6 @@
       $('#cfg-language').value = currentConfig.language;
       if (currentConfig.model) $('#cfg-model').value = currentConfig.model;
       $('#cfg-default-profile').value = currentConfig.defaultProfileId || '';
-      $('#cfg-default-prompt').value = currentConfig.defaultPrompt || '';
     }
 
     function envIndicator(set, masked) {
@@ -1106,6 +1113,26 @@
       uploadSel.innerHTML = options;
       cfgSel.value = (currentConfig?.defaultProfileId) || cfgPrev || '';
       uploadSel.value = profiles.some((p) => p.id === uploadPrev) ? uploadPrev : '';
+      updateContextPreview();
+    }
+
+    // Le contexte IA est associé à la destination, pas à la config globale —
+    // ce panneau se contente d'en afficher un aperçu lecture-seule pour la
+    // destination par défaut, avec un raccourci vers sa fiche pour l'éditer.
+    function updateContextPreview() {
+      const id = $('#cfg-default-profile').value;
+      const profile = profiles.find((p) => p.id === id);
+      const preview = $('#cfg-context-preview');
+      const editBtn = $('#cfg-context-edit');
+      if (!id) {
+        preview.value = '';
+        preview.placeholder = 'Sélectionne une destination par défaut ci-dessus pour lui associer un contexte';
+        editBtn.disabled = true;
+      } else {
+        preview.value = profile?.context || '';
+        preview.placeholder = 'Aucun contexte défini pour cette destination';
+        editBtn.disabled = false;
+      }
     }
 
     function renderProfilesList() {
@@ -1161,6 +1188,7 @@
       $('#profile-form').style.display = '';
       $('#profile-id').value = profile?.id || '';
       $('#profile-name').value = profile?.name || '';
+      $('#profile-context').value = profile?.context || '';
       $('#profile-platform').value = profile?.platform || 'shopify';
       $('#profile-wp-url').value = profile?.wp?.siteUrl || '';
       $('#profile-wp-user').value = profile?.wp?.username || '';
@@ -1186,7 +1214,7 @@
       const platform = $('#profile-platform').value;
       if (!name) { alert('Le nom est requis'); return; }
 
-      const body = { name, platform };
+      const body = { name, platform, context: $('#profile-context').value.trim() };
       if (platform === 'wordpress') {
         body.wp = {
           siteUrl: $('#profile-wp-url').value.trim(),
@@ -1351,9 +1379,14 @@
         language: $('#cfg-language').value,
         model: $('#cfg-model').value,
         defaultProfileId: $('#cfg-default-profile').value || null,
-        defaultPrompt: $('#cfg-default-prompt').value.trim(),
       });
       await loadConfig();
+    });
+
+    $('#cfg-default-profile').addEventListener('change', updateContextPreview);
+    $('#cfg-context-edit').addEventListener('click', () => {
+      const profile = profiles.find((p) => p.id === $('#cfg-default-profile').value);
+      if (profile) openProfileForm(profile);
     });
 
     // Config test — vérifie le modèle IA sélectionné et, si choisie, la

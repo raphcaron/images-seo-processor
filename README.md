@@ -6,8 +6,7 @@ Outil web de traitement SEO d'images alimenté par IA. Analyse, renomme et optim
 
 - Analyse IA multi-fournisseur au choix : Claude (Anthropic, payant), Gemini (Google, gratuit avec limites de débit), ou un modèle vision local via Ollama (gratuit, illimité, aucune donnée envoyée à l'extérieur) — pour générer des noms de fichiers SEO, des textes alternatifs et des mots-clés
 - Upload par drag-and-drop (fichiers ou dossier entier avec sous-dossiers) ou surveillance automatique d'un dossier
-- Contexte permanent configurable (entreprise, secteur, ton) appliqué à toutes les analyses — upload manuel, dossier surveillé, nouveaux essais
-- Destinations multiples sauvegardées (plusieurs sites WordPress et/ou stores Shopify), sélectionnables au moment de l'upload
+- Destinations multiples sauvegardées (plusieurs sites WordPress et/ou stores Shopify), chacune avec son propre contexte IA permanent (entreprise, secteur, ton), sélectionnables au moment de l'upload
 - Reprise automatique des envois interrompus (ex: crédits IA épuisés en cours de traitement) et nouvel essai des envois réseau échoués (5xx, timeout)
 - Fichiers en échec d'analyse conservés dans `input/failed/` et retentables depuis l'interface, sans avoir à reglisser le dossier source
 - Historique des traitements avec export CSV
@@ -85,8 +84,7 @@ Le fichier `config.json` à la racine :
   "language": "fr",
   "model": "claude-opus-4-8",
   "shopifyApiVersion": "2025-01",
-  "defaultProfileId": null,
-  "defaultPrompt": ""
+  "defaultProfileId": null
 }
 ```
 
@@ -95,7 +93,6 @@ Le fichier `config.json` à la racine :
 | `language` | `fr`, `en`, `es`, `de` | Langue des textes générés |
 | `model` | ex: `claude-opus-4-8`, `gemini-flash-latest`, `local:qwen3-vl:8b-instruct` | Modèle IA utilisé — voir "Modèles IA disponibles" plus haut |
 | `defaultProfileId` | id d'une destination, ou `null` | Destination utilisée pour le dossier surveillé `input/` |
-| `defaultPrompt` | texte libre, ou `""` | Contexte permanent donné à l'IA pour chaque image (entreprise, secteur, ton...) — appliqué à l'upload manuel, au dossier surveillé et aux nouveaux essais. Modifiable depuis la carte "Configuration" de l'interface. |
 
 La configuration est aussi modifiable depuis l'interface.
 
