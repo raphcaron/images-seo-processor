@@ -223,6 +223,11 @@ export function createServer(config) {
     // l'origine dans les logs/CSV même si le fichier est aplati sur disque.
     const relativePath = req.body.relativePath || '';
     const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : null;
+    // Toggle "Forcer le retraitement" côté client: bypasse la détection de
+    // doublon ci-dessous, pour retraiter/ré-uploader volontairement une image
+    // déjà dans l'historique (ex: comparer un autre modèle IA sur la même
+    // image, ou l'image a été supprimée manuellement côté destination).
+    const force = req.body.force === '1';
 
     // Reprise: si un dossier a déjà été (partiellement) traité — ex: crédits
     // Anthropic épuisés en cours de route, destination indisponible, ou même
@@ -230,7 +235,7 @@ export function createServer(config) {
     // qui est déjà acquis. On cherche dans le CSV actif ET les archives
     // backups/, car un clear d'historique déplace les lignes déjà traitées
     // dans une archive sans effacer le travail qu'elles représentent.
-    const history = readAllHistory(config.outputDir);
+    const history = force ? [] : readAllHistory(config.outputDir);
     const lastByOriginal = new Map();
     for (const row of history) lastByOriginal.set(row.original, row); // le dernier gagne (ordre chronologique)
 

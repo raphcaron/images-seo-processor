@@ -626,6 +626,62 @@
       justify-content: space-between;
     }
 
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .switch-row .switch-label {
+      font-size: .85rem;
+      color: var(--text-dim);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 999px;
+      transition: background .15s;
+    }
+
+    .switch-slider::before {
+      content: '';
+      position: absolute;
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      top: 3px;
+      background: var(--text);
+      border-radius: 50%;
+      transition: transform .15s;
+    }
+
+    .switch input:checked+.switch-slider {
+      background: var(--accent);
+    }
+
+    .switch input:checked+.switch-slider::before {
+      transform: translateX(16px);
+      background: #fff;
+    }
+
     [data-theme="light"] {
       --bg: #f5f7fa;
       --bg-card: #ffffff;
@@ -784,6 +840,13 @@
             <option value="">Aucune (local)</option>
           </select>
         </div>
+        <label class="switch-row" style="margin-bottom:.75rem">
+          <span class="switch">
+            <input type="checkbox" id="force-reprocess">
+            <span class="switch-slider"></span>
+          </span>
+          <span class="switch-label">Forcer le retraitement (ré-upload même si déjà dans l'historique)</span>
+        </label>
         <div class="field" style="margin-bottom:.75rem">
           <label>Instructions pour l'IA (optionnel)</label>
           <textarea id="custom-prompt" rows="3" placeholder="Ex: Photo de produits cosmétiques bio, style minimaliste, fond blanc…"></textarea>
@@ -1177,6 +1240,12 @@
       localStorage.setItem('uploadDestination', e.target.value);
     });
 
+    const forceReprocessEl = $('#force-reprocess');
+    forceReprocessEl.checked = localStorage.getItem('forceReprocess') === '1';
+    forceReprocessEl.addEventListener('change', () => {
+      localStorage.setItem('forceReprocess', forceReprocessEl.checked ? '1' : '0');
+    });
+
     const deletedFiles = new Set();
 
     async function loadHistory() {
@@ -1430,6 +1499,7 @@
 
       const customPrompt = $('#custom-prompt').value.trim();
       const profileId = $('#upload-destination').value;
+      const force = forceReprocessEl.checked;
 
       async function uploadOne(i) {
         const { file, relativePath } = entries[i];
@@ -1443,6 +1513,7 @@
         formData.append('relativePath', relativePath);
         if (customPrompt) formData.append('customPrompt', customPrompt);
         if (profileId) formData.append('profileId', profileId);
+        if (force) formData.append('force', '1');
 
         try {
           const res = await fetch('/api/upload', { method: 'POST', body: formData });
