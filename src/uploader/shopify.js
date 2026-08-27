@@ -38,6 +38,62 @@ export async function uploadToShopify(filePath, altText, shopifyCreds) {
   return file;
 }
 
+// Vérifie le store/token sans rien uploader: interroge le shop et les scopes
+// accordés à l'app, et s'assure que la permission write_files est présente.
+export async function testShopify(shopifyCreds) {
+  const store = shopifyCreds?.store;
+  const accessToken = shopifyCreds?.accessToken;
+
+  if (!store || !accessToken) {
+    throw new Error('Store et Access Token requis');
+  }
+
+  const apiVersion = shopifyCreds?.apiVersion || '2025-01';
+  const adminUrl = `https://${store}/admin/api/${apiVersion}/graphql.json`;
+  const query = `
+    query {
+      shop { name }
+      currentAppInstallation {
+        accessScopes { handle }
+      }
+    }
+  `;
+
+  let response;
+  try {
+    response = await fetch(adminUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ query }),
+    });
+  } catch (err) {
+    throw new Error(`Store injoignable (${store}): ${err.message}`);
+  }
+
+  if (response.status === 401) {
+    throw new Error('Access Token invalide');
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Shopify (${response.status}): ${body.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  if (data.errors?.length) {
+    throw new Error(`Shopify: ${JSON.stringify(data.errors).slice(0, 200)}`);
+  }
+
+  const scopes = data.data?.currentAppInstallation?.accessScopes?.map((s) => s.handle) || [];
+  if (!scopes.includes('write_files')) {
+    throw new Error(`Connecté à "${data.data.shop.name}", mais le token n'a pas la permission write_files (upload de fichiers)`);
+  }
+
+  return { ok: true, message: `Connecté à "${data.data.shop.name}" — upload de fichiers autorisé` };
+}
+
 async function shopifyGraphQL(url, accessToken, query, variables) {
   return withRetry(async () => {
     const response = await fetch(url, {

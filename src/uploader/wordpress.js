@@ -58,3 +58,40 @@ export async function uploadToWordPress(filePath, altText, wpCreds) {
   console.log(`    [✓] WordPress: media #${media.id}`);
   return media;
 }
+
+// Vérifie les identifiants sans rien uploader: authentifie sur /users/me et
+// s'assure que le compte a la permission de gérer des médias.
+export async function testWordPress(wpCreds) {
+  const siteUrl = wpCreds?.siteUrl;
+  const username = wpCreds?.username;
+  const appPassword = wpCreds?.appPassword;
+
+  if (!siteUrl || !username || !appPassword) {
+    throw new Error('URL du site, utilisateur et mot de passe application requis');
+  }
+
+  const credentials = Buffer.from(`${username}:${appPassword}`).toString('base64');
+  let response;
+  try {
+    response = await fetch(`${siteUrl.replace(/\/$/, '')}/wp-json/wp/v2/users/me?context=edit`, {
+      headers: { Authorization: `Basic ${credentials}` },
+    });
+  } catch (err) {
+    throw new Error(`Site injoignable (${siteUrl}): ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Identifiants refusés — utilisateur ou mot de passe application invalide');
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`WordPress (${response.status}): ${body.slice(0, 200)}`);
+  }
+
+  const user = await response.json();
+  if (!user.capabilities?.upload_files) {
+    throw new Error(`Connecté en tant que "${user.name}", mais ce compte n'a pas la permission d'uploader des médias`);
+  }
+
+  return { ok: true, message: `Connecté en tant que "${user.name}" — upload de médias autorisé` };
+}

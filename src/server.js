@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renam
 import { join, extname, basename, resolve } from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { processImage, retryUpload } from './analyzer.js';
+import { processImage, retryUpload, testModel } from './analyzer.js';
 import { startWatcher, stopWatcher } from './watcher.js';
 import { readCsvRows, readAllHistory } from './csv-writer.js';
 import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
@@ -15,6 +15,8 @@ import {
 import {
   loadFailures, getFailure, recordFailure, removeFailure, updateFailureError, maskFailure,
 } from './failures.js';
+import { testWordPress } from './uploader/wordpress.js';
+import { testShopify } from './uploader/shopify.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -118,6 +120,38 @@ export function createServer(config) {
     res.json({ ok });
   });
 
+  // Vérifie un modèle IA (clé + accès) ou une destination (identifiants +
+  // permission d'upload) sans consommer de tokens ni rien envoyer. Pour une
+  // destination, accepte soit un profil déjà enregistré (profileId) soit des
+  // identifiants bruts (platform/wp/shopify) pour tester avant sauvegarde.
+  app.post('/api/test/model', async (req, res) => {
+    try {
+      const result = await testModel({ ...config, model: req.body.model || config.model });
+      addLog('success', `Test modèle IA: ${result.message}`);
+      res.json(result);
+    } catch (err) {
+      addLog('error', `Test modèle IA échoué: ${err.message}`);
+      res.json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/test/profile', async (req, res) => {
+    const destination = req.body.profileId ? getProfile(ROOT, req.body.profileId) : req.body;
+    if (!destination || !['wordpress', 'shopify'].includes(destination.platform)) {
+      return res.status(400).json({ ok: false, error: 'Plateforme requise (wordpress|shopify)' });
+    }
+    try {
+      const result = destination.platform === 'wordpress'
+        ? await testWordPress(destination.wp)
+        : await testShopify(destination.shopify);
+      addLog('success', `Test destination: ${result.message}`);
+      res.json(result);
+    } catch (err) {
+      addLog('error', `Test destination échoué: ${err.message}`);
+      res.json({ ok: false, error: err.message });
+    }
+  });
+
   app.get('/api/history', (_req, res) => {
     res.json(readCsvRows(config.outputDir).reverse());
   });
@@ -170,6 +204,13 @@ export function createServer(config) {
     const failure = removeFailure(config, req.params.id);
     if (failure) addLog('info', `Échec ignoré: ${failure.displayName}`);
     res.json({ ok: !!failure });
+  });
+
+  app.delete('/api/failures', (_req, res) => {
+    const failures = loadFailures(config.outputDir);
+    for (const f of failures) removeFailure(config, f.id);
+    if (failures.length) addLog('info', `${failures.length} échec(s) ignoré(s)`);
+    res.json({ ok: true, count: failures.length });
   });
 
   app.post('/api/upload', upload.array('files', 20), async (req, res) => {

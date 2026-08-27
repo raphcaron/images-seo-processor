@@ -25,8 +25,6 @@ const LANGUAGE_MAP = {
   de: 'auf Deutsch',
 };
 
-const client = new Anthropic();
-
 export async function processImage(filePath, config, customPrompt = '', displayName = '', destination = null) {
   const resolvedPath = resolve(filePath);
   const imageData = readFileSync(resolvedPath);
@@ -129,6 +127,76 @@ export async function retryUpload(displayName, config, destination) {
   return { found: true, uploadStatus, uploadError };
 }
 
+// Vérifie que le modèle IA sélectionné est accessible (clé valide, modèle
+// disponible) sans consommer de tokens de génération.
+export async function testModel(config) {
+  const model = config.model || 'claude-opus-4-8';
+  if (model.startsWith('local:')) return testOllama(model.slice('local:'.length));
+  if (model.startsWith('gemini-')) return testGemini(model);
+  return testClaude(model);
+}
+
+// Fait un vrai appel de génération minimal (1 token) plutôt que de lister les
+// modèles: lister ne vérifie que la clé, pas le crédit disponible — une clé
+// valide avec un compte à sec renvoie quand même 200 sur /v1/models mais
+// échoue à la génération, ce qu'on veut détecter ici.
+async function testClaude(model) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY manquante — ajoute une clé Anthropic dans les paramètres');
+  }
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  try {
+    await client.messages.create({
+      model,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'test' }],
+    });
+  } catch (err) {
+    if (err.status === 401) throw new Error('Clé Anthropic invalide');
+    if (err.status === 400 && /credit/i.test(err.message)) {
+      throw new Error('Clé valide, mais crédit Anthropic épuisé — recharge sur console.anthropic.com/settings/billing');
+    }
+    if (err.status === 404) throw new Error(`Modèle "${model}" introuvable côté Anthropic`);
+    throw new Error(`Anthropic: ${err.message}`);
+  }
+  return { ok: true, message: `Claude: clé valide et crédit disponible, modèle "${model}" accessible` };
+}
+
+async function testGemini(model) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY manquante — ajoute une clé Gemini gratuite dans les paramètres');
+  }
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  try {
+    await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+      config: { maxOutputTokens: 1 },
+    });
+  } catch (err) {
+    throw new Error(`Gemini: ${err.message}`);
+  }
+  return { ok: true, message: `Gemini: clé valide et quota disponible, modèle "${model}" accessible` };
+}
+
+async function testOllama(model) {
+  let response;
+  try {
+    response = await fetch(`${OLLAMA_URL}/api/tags`);
+  } catch (err) {
+    throw new Error(`Ollama injoignable (${OLLAMA_URL}) — vérifie qu'il tourne (ollama serve): ${err.message}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Ollama (${response.status})`);
+  }
+  const data = await response.json();
+  const found = data.models?.some((m) => m.name === model || m.model === model);
+  if (!found) {
+    throw new Error(`Modèle Ollama "${model}" non téléchargé — lance: ollama pull ${model}`);
+  }
+  return { ok: true, message: `Ollama: modèle "${model}" disponible localement` };
+}
+
 function analyzeImage(base64Image, mediaType, lang, config, customPrompt = '') {
   const model = config.model || 'claude-opus-4-8';
   if (model.startsWith('local:')) {
@@ -140,7 +208,11 @@ function analyzeImage(base64Image, mediaType, lang, config, customPrompt = '') {
   return analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt);
 }
 
+// Client construit à chaque appel (pas de singleton au chargement du module)
+// pour que sauvegarder une nouvelle clé ANTHROPIC_API_KEY depuis l'interface
+// prenne effet immédiatement, sans redémarrer le serveur.
 async function analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt = '') {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model,
     max_tokens: 300,

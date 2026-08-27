@@ -726,7 +726,11 @@
             <option value="">Aucune (local)</option>
           </select>
         </div>
-        <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
+          <button class="btn" id="cfg-test">Tester la config</button>
+          <span id="cfg-test-result"></span>
+        </div>
       </div>
 
       <!-- UPLOAD -->
@@ -838,9 +842,11 @@
             </div>
           </div>
         </div>
-        <div style="display:flex;gap:.5rem;margin-top:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" id="profile-save">Enregistrer</button>
+          <button class="btn" id="profile-test">Tester la connexion</button>
           <button class="btn" id="profile-cancel">Annuler</button>
+          <span id="profile-test-result"></span>
         </div>
       </div>
     </div>
@@ -855,7 +861,10 @@
     <div class="card section-gap" id="failures-card" style="display:none">
       <div class="toggle-row" style="margin-bottom:1rem">
         <h2 style="margin:0">Images en erreur</h2>
-        <button class="btn btn-primary" id="retry-all-failures">Tout réessayer</button>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-primary" id="retry-all-failures">Tout réessayer</button>
+          <button class="btn" id="dismiss-all-failures" style="border-color:var(--red);color:var(--red)">Tout ignorer</button>
+        </div>
       </div>
       <div id="failures-container"></div>
     </div>
@@ -1032,6 +1041,7 @@
       $('#profile-wp-pass').value = '';
       $('#profile-shopify-store').value = profile?.shopify?.store || '';
       $('#profile-shopify-token').value = '';
+      $('#profile-test-result').textContent = '';
       toggleProfilePlatformFields();
       $('#profile-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -1071,6 +1081,34 @@
       }
       closeProfileForm();
       await loadProfiles();
+    });
+
+    $('#profile-test').addEventListener('click', async () => {
+      const btn = $('#profile-test');
+      const result = $('#profile-test-result');
+      const id = $('#profile-id').value;
+      const platform = $('#profile-platform').value;
+
+      let body;
+      if (platform === 'wordpress') {
+        const pass = $('#profile-wp-pass').value;
+        body = id && !pass
+          ? { profileId: id }
+          : { platform, wp: { siteUrl: $('#profile-wp-url').value.trim(), username: $('#profile-wp-user').value.trim(), appPassword: pass } };
+      } else {
+        const token = $('#profile-shopify-token').value;
+        body = id && !token
+          ? { profileId: id }
+          : { platform, shopify: { store: $('#profile-shopify-store').value.trim(), accessToken: token } };
+      }
+
+      btn.disabled = true;
+      result.textContent = 'Test en cours…';
+      result.style.color = '';
+      const res = await api('POST', '/api/test/profile', body);
+      result.textContent = res.ok ? `✓ ${res.message}` : `✗ ${res.error}`;
+      result.style.color = res.ok ? 'var(--green)' : 'var(--red)';
+      btn.disabled = false;
     });
 
     $('#upload-destination').addEventListener('change', (e) => {
@@ -1160,6 +1198,15 @@
       await refreshStatus();
     });
 
+    $('#dismiss-all-failures').addEventListener('click', async () => {
+      if (!confirm('Ignorer toutes les images en erreur ? Elles ne seront plus retentables.')) return;
+      const btn = $('#dismiss-all-failures');
+      btn.disabled = true;
+      await api('DELETE', '/api/failures');
+      btn.disabled = false;
+      await loadFailures();
+    });
+
     function esc(s) {
       const d = document.createElement('div');
       d.textContent = s;
@@ -1174,6 +1221,32 @@
         defaultProfileId: $('#cfg-default-profile').value || null,
       });
       await loadConfig();
+    });
+
+    // Config test — vérifie le modèle IA sélectionné et, si choisie, la
+    // destination par défaut, sans rien traiter ni uploader.
+    $('#cfg-test').addEventListener('click', async () => {
+      const btn = $('#cfg-test');
+      const result = $('#cfg-test-result');
+      btn.disabled = true;
+      result.style.color = '';
+      result.textContent = 'Test en cours…';
+
+      const model = $('#cfg-model').value;
+      const modelRes = await api('POST', '/api/test/model', { model });
+      const lines = [modelRes.ok ? `✓ ${modelRes.message}` : `✗ ${modelRes.error}`];
+      let allOk = modelRes.ok;
+
+      const profileId = $('#cfg-default-profile').value;
+      if (profileId) {
+        const destRes = await api('POST', '/api/test/profile', { profileId });
+        lines.push(destRes.ok ? `✓ ${destRes.message}` : `✗ ${destRes.error}`);
+        allOk = allOk && destRes.ok;
+      }
+
+      result.innerHTML = lines.map(esc).join('<br>');
+      result.style.color = allOk ? 'var(--green)' : 'var(--red)';
+      btn.disabled = false;
     });
 
     // Env save
