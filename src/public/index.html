@@ -413,7 +413,7 @@
       padding: .6rem .75rem;
       background: var(--bg-input);
       border-radius: 6px;
-      margin-bottom: .5rem;
+      margin-bottom: .75rem;
       font-size: .85rem;
     }
 
@@ -1137,6 +1137,13 @@
 
     function renderProfilesList() {
       const container = $('#profiles-list');
+      const form = $('#profile-form');
+      // Détache le formulaire avant de reconstruire la liste (sinon
+      // innerHTML détruirait son nœud s'il était positionné sous une ligne) —
+      // le repositionne ensuite sous sa ligne si toujours ouvert pour un
+      // profil présent dans le nouveau rendu.
+      container.insertAdjacentElement('afterend', form);
+
       if (!profiles.length) {
         container.innerHTML = '<div class="empty-state">Aucune destination enregistrée</div>';
         return;
@@ -1170,6 +1177,12 @@
           await loadProfiles();
         });
       });
+
+      const editingId = $('#profile-id').value;
+      if (form.style.display !== 'none' && editingId) {
+        const row = container.querySelector(`[data-id="${CSS.escape(editingId)}"]`);
+        if (row) row.insertAdjacentElement('afterend', form);
+      }
     }
 
     async function loadProfiles() {
@@ -1185,7 +1198,8 @@
     }
 
     function openProfileForm(profile) {
-      $('#profile-form').style.display = '';
+      const form = $('#profile-form');
+      form.style.display = '';
       $('#profile-id').value = profile?.id || '';
       $('#profile-name').value = profile?.name || '';
       $('#profile-context').value = profile?.context || '';
@@ -1197,7 +1211,14 @@
       $('#profile-shopify-token').value = '';
       $('#profile-test-result').textContent = '';
       toggleProfilePlatformFields();
-      $('#profile-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // Positionne le formulaire directement sous la ligne éditée (ou après
+      // la liste pour un ajout) plutôt qu'à un emplacement fixe en bas.
+      const container = $('#profiles-list');
+      const row = profile ? container.querySelector(`[data-id="${CSS.escape(profile.id)}"]`) : null;
+      (row || container).insertAdjacentElement('afterend', form);
+
+      form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function closeProfileForm() {
