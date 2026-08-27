@@ -1,5 +1,5 @@
 import { watch as chokidarWatch } from 'chokidar';
-import { extname, resolve } from 'path';
+import { extname, resolve, join } from 'path';
 import { processImage } from './analyzer.js';
 import { getProfile } from './profiles.js';
 import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
@@ -18,6 +18,13 @@ export function startWatcher(config, rootDir) {
   watcherInstance = chokidarWatch(inputDir, {
     ignoreInitial: true,
     ignorePermissionErrors: true,
+    // input/failed/ est une zone d'attente gérée par failures.js pour les
+    // images dont l'analyse a échoué — un nouvel essai s'y fait uniquement
+    // depuis l'interface (POST /api/failures/:id/retry), jamais par simple
+    // détection de fichier, sinon le watcher retraite le fichier en double
+    // dès qu'il y est déplacé, avec son nom UUID interne au lieu du nom
+    // d'origine.
+    ignored: (path) => resolve(path).startsWith(resolve(join(inputDir, 'failed'))),
     awaitWriteFinish: {
       stabilityThreshold: 2000,
       pollInterval: 500,

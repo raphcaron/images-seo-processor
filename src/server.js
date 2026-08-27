@@ -66,6 +66,7 @@ export function createServer(config) {
       watcherActive: state.watcherActive,
       isProcessing: state.isProcessing,
       currentFile: state.currentFile,
+      currentStep: state.currentStep,
       processed: countHistory(),
       errors: state.errors,
       queueSize: queue.size,

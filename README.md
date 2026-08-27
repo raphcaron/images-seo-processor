@@ -59,10 +59,12 @@ Pour un traitement illimité et gratuit sans dépendre d'un fournisseur externe 
 curl -fsSL https://ollama.com/install.sh | sh
 
 # 2. Télécharger le modèle vision (~6 Go pour la version 8B)
-ollama pull qwen3-vl:8b
+ollama pull qwen3-vl:8b-instruct
 # ou la version plus légère/rapide :
-ollama pull qwen3-vl:4b
+ollama pull qwen3-vl:4b-instruct
 ```
+
+Utilise bien le tag `-instruct` (pas `qwen3-vl:8b`/`qwen3-vl:4b` tout court) : les tags sans suffixe sont des variantes "thinking" qui passent la majorité du budget de génération en raisonnement interne avant de répondre — beaucoup plus lent, et le JSON final peut même ne jamais arriver si la réflexion dépasse la limite de tokens. Les tags `-instruct` répondent directement, sans ce détour.
 
 Ensuite, sélectionne "Qwen3-VL (local)" dans le menu "Modèle IA" de l'interface. Recommandé : GPU avec au moins 8 Go de VRAM pour la version 8B (4 Go pour la version 4B). Fonctionne aussi sur CPU, mais plus lentement.
 

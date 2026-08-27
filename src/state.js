@@ -6,6 +6,7 @@ export const state = {
   watcherActive: false,
   isProcessing: false,
   currentFile: null,
+  currentStep: null,
   errors: 0,
   logs: [],
 };

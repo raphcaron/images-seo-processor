@@ -363,6 +363,48 @@
       color: var(--text-dim);
     }
 
+    .current-activity {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .6rem .75rem;
+      margin-bottom: .75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--yellow-bg);
+    }
+
+    .current-activity-thumb {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: var(--bg-input);
+      flex-shrink: 0;
+    }
+
+    .current-activity-body {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .current-activity-name {
+      font-weight: 600;
+      font-size: .85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .current-activity-step {
+      font-size: .78rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      margin-top: .15rem;
+    }
+
     .profile-row {
       display: flex;
       align-items: center;
@@ -715,7 +757,7 @@
               <option value="claude-opus-4-8">Claude Opus 4.8</option>
               <option value="claude-fable-5">Claude Fable 5</option>
               <option value="gemini-flash-latest">Google Gemini Flash (gratuit, limité)</option>
-              <option value="local:qwen3-vl:8b">Qwen3-VL 8B (local, gratuit, illimité)</option>
+              <option value="local:qwen3-vl:8b-instruct">Qwen3-VL 8B (local, gratuit, illimité)</option>
               <option value="local:qwen3-vl:4b-instruct">Qwen3-VL 4B (local, plus léger/rapide)</option>
             </select>
           </div>
@@ -752,6 +794,13 @@
           <p class="hint">JPG, PNG, WebP, AVIF, GIF — max 20 Mo — sous-dossiers inclus</p>
           <input type="file" id="file-input" multiple accept="image/*">
           <input type="file" id="folder-input" webkitdirectory multiple>
+        </div>
+        <div class="current-activity" id="current-activity" style="display:none">
+          <img class="current-activity-thumb" id="current-activity-thumb" alt="">
+          <div class="current-activity-body">
+            <div class="current-activity-name" id="current-activity-name"></div>
+            <div class="current-activity-step"><span class="pill pill-yellow"></span> <span id="current-activity-step"></span></div>
+          </div>
         </div>
         <div class="upload-progress" id="upload-progress"></div>
       </div>
@@ -914,6 +963,19 @@
       $('#stat-errors').textContent = data.errors;
       $('#stat-queue').textContent = data.queueSize;
       $('#stat-status').textContent = data.isProcessing ? (data.currentFile || '...') : 'En attente';
+
+      const activity = $('#current-activity');
+      if (data.isProcessing && data.currentFile) {
+        activity.style.display = '';
+        $('#current-activity-name').textContent = data.currentFile;
+        $('#current-activity-step').textContent = data.currentStep || 'Traitement en cours';
+        const thumb = $('#current-activity-thumb');
+        const url = thumbCache.get(data.currentFile);
+        thumb.style.display = url ? '' : 'none';
+        if (url) thumb.src = url;
+      } else {
+        activity.style.display = 'none';
+      }
 
       const badge = $('#watcher-badge');
       const btn = $('#watcher-toggle');
@@ -1300,6 +1362,9 @@
     const progressBox = $('#upload-progress');
     const IMAGE_EXT_RE = /\.(jpe?g|png|webp|avif|gif)$/i;
     const UPLOAD_CONCURRENCY = 4;
+    // Miniatures générées côté client (aucun aller-retour serveur nécessaire)
+    // pour montrer la photo en cours de traitement dans le panneau d'activité.
+    const thumbCache = new Map();
 
     $('#select-files-link').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); fileInput.click(); });
     $('#select-folder-link').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); folderInput.click(); });
@@ -1369,7 +1434,9 @@
       async function uploadOne(i) {
         const { file, relativePath } = entries[i];
         items[i].status = 'uploading';
+        thumbCache.set(relativePath, URL.createObjectURL(file));
         renderProgress(items);
+        refreshStatus();
 
         const formData = new FormData();
         formData.append('files', file);
@@ -1387,6 +1454,10 @@
           items[i].status = 'error';
           items[i].error = err.message;
         }
+
+        const url = thumbCache.get(relativePath);
+        if (url) URL.revokeObjectURL(url);
+        thumbCache.delete(relativePath);
 
         renderProgress(items);
         refreshStatus();

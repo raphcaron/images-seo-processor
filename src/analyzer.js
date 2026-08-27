@@ -36,6 +36,7 @@ export async function processImage(filePath, config, customPrompt = '', displayN
 
   state.isProcessing = true;
   state.currentFile = originalName;
+  state.currentStep = `Analyse IA (${config.model || 'claude-opus-4-8'}) en cours`;
   doneFiles.add(resolvedPath);
   addLog('info', `Analyse IA: ${originalName}`);
 
@@ -52,6 +53,7 @@ export async function processImage(filePath, config, customPrompt = '', displayN
     // travail ni forcer une nouvelle analyse au prochain essai — on capture
     // l'erreur séparément et on la consigne dans le CSV pour pouvoir ne
     // retenter que l'upload plus tard.
+    state.currentStep = destination ? `Envoi vers ${platformLabel(destination.platform)} en cours` : null;
     const { uploadStatus, uploadError } = await attemptUpload(outputPath, analysis.alt_text, destination);
 
     await appendToCsv(config.outputDir, {
@@ -67,7 +69,12 @@ export async function processImage(filePath, config, customPrompt = '', displayN
   } finally {
     state.isProcessing = false;
     state.currentFile = null;
+    state.currentStep = null;
   }
+}
+
+function platformLabel(platform) {
+  return platform === 'wordpress' ? 'WordPress' : 'Shopify';
 }
 
 async function attemptUpload(outputPath, altText, destination) {
@@ -113,18 +120,27 @@ export async function retryUpload(displayName, config, destination) {
   }
 
   addLog('info', `Nouvel essai d'envoi: ${displayName}`);
-  const { uploadStatus, uploadError } = await attemptUpload(outputPath, row.alt_text, destination);
+  state.isProcessing = true;
+  state.currentFile = displayName;
+  state.currentStep = destination ? `Envoi vers ${platformLabel(destination.platform)} en cours` : null;
+  try {
+    const { uploadStatus, uploadError } = await attemptUpload(outputPath, row.alt_text, destination);
 
-  await appendToCsv(config.outputDir, {
-    original: row.original,
-    filename: row.filename,
-    alt_text: row.alt_text,
-    keywords: row.keywords,
-    upload_status: uploadStatus,
-  });
-  if (uploadStatus === 'ok') addLog('success', `Upload réussi: ${row.filename}`);
+    await appendToCsv(config.outputDir, {
+      original: row.original,
+      filename: row.filename,
+      alt_text: row.alt_text,
+      keywords: row.keywords,
+      upload_status: uploadStatus,
+    });
+    if (uploadStatus === 'ok') addLog('success', `Upload réussi: ${row.filename}`);
 
-  return { found: true, uploadStatus, uploadError };
+    return { found: true, uploadStatus, uploadError };
+  } finally {
+    state.isProcessing = false;
+    state.currentFile = null;
+    state.currentStep = null;
+  }
 }
 
 // Vérifie que le modèle IA sélectionné est accessible (clé valide, modèle
@@ -286,6 +302,11 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
         prompt: buildPrompt(lang, customPrompt),
         images: [pngBase64],
         stream: false,
+        // Les tags "thinking" (ex: qwen3-vl:8b, contrairement aux variantes
+        // -instruct) passent sinon le budget de génération en raisonnement
+        // interne et renvoient un "response" vide — on veut la réponse finale
+        // directement, pas le raisonnement.
+        think: false,
       }),
     });
   } catch (err) {
