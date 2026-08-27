@@ -6,7 +6,7 @@ Outil web de traitement SEO d'images alimenté par IA. Analyse, renomme et optim
 
 - Analyse IA multi-fournisseur au choix : Claude (Anthropic, payant), Gemini (Google, gratuit avec limites de débit), ou un modèle vision local via Ollama (gratuit, illimité, aucune donnée envoyée à l'extérieur) — pour générer des noms de fichiers SEO, des textes alternatifs et des mots-clés
 - Upload par drag-and-drop (fichiers ou dossier entier avec sous-dossiers) ou surveillance automatique d'un dossier
-- Prompt personnalisable pour guider l'analyse de chaque lot d'images
+- Contexte permanent configurable (entreprise, secteur, ton) appliqué à toutes les analyses — upload manuel, dossier surveillé, nouveaux essais
 - Destinations multiples sauvegardées (plusieurs sites WordPress et/ou stores Shopify), sélectionnables au moment de l'upload
 - Reprise automatique des envois interrompus (ex: crédits IA épuisés en cours de traitement) et nouvel essai des envois réseau échoués (5xx, timeout)
 - Fichiers en échec d'analyse conservés dans `input/failed/` et retentables depuis l'interface, sans avoir à reglisser le dossier source
@@ -114,9 +114,9 @@ L'interface est accessible sur `http://localhost:3000`.
 
 Avant l'upload, choisissez la destination (WordPress, Shopify, ou "Aucune" pour un traitement local uniquement) dans le menu au-dessus de la zone de drop.
 
-### Prompt personnalisé
+### Contexte pour l'IA
 
-Un champ texte au-dessus de la zone d'upload permet d'ajouter des instructions pour guider l'IA (contexte produit, style, public cible, etc.). Ces instructions sont prises en compte pour le nom de fichier, le texte alternatif et les mots-clés.
+Le champ "Contexte pour l'IA" de la carte Configuration (entreprise, secteur, ton, public cible...) est pris en compte pour le nom de fichier, le texte alternatif et les mots-clés de chaque image — pour tous les traitements (upload manuel, dossier surveillé `input/`, nouveaux essais).
 
 ### Formats supportés
 

@@ -825,9 +825,8 @@
           </select>
         </div>
         <div class="field">
-          <label>Contexte par défaut pour l'IA (entreprise, secteur, ton...)</label>
+          <label>Contexte pour l'IA (entreprise, secteur, ton...)</label>
           <textarea id="cfg-default-prompt" rows="3" placeholder="Ex: Images pour une entreprise de distribution de matériel de plomberie et électrique."></textarea>
-          <p class="hint" style="margin-top:.35rem">Appliqué à tous les traitements (upload manuel, dossier surveillé, nouvel essai) — le champ "Instructions pour l'IA" ci-contre en repart et peut le compléter pour un lot précis.</p>
         </div>
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
           <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
@@ -852,10 +851,6 @@
           </span>
           <span class="switch-label">Forcer le retraitement (ré-upload même si déjà dans l'historique)</span>
         </label>
-        <div class="field" style="margin-bottom:.75rem">
-          <label>Instructions pour l'IA (optionnel)</label>
-          <textarea id="custom-prompt" rows="3" placeholder="Ex: Photo de produits cosmétiques bio, style minimaliste, fond blanc…"></textarea>
-        </div>
         <div class="upload-zone" id="drop-zone">
           <div class="icon">&#128444;</div>
           <p>Glissez vos images ou un dossier ici<br>ou <a href="#" id="select-files-link">cliquez pour sélectionner des fichiers</a><br>ou <a href="#" id="select-folder-link">sélectionnez un dossier entier</a></p>
@@ -1078,10 +1073,6 @@
       if (currentConfig.model) $('#cfg-model').value = currentConfig.model;
       $('#cfg-default-profile').value = currentConfig.defaultProfileId || '';
       $('#cfg-default-prompt').value = currentConfig.defaultPrompt || '';
-      // Pré-remplit le champ d'upload avec le contexte par défaut (modifiable
-      // pour ce lot précis sans toucher au défaut sauvegardé) — seulement au
-      // chargement de la page, pour ne pas écraser une saisie en cours.
-      $('#custom-prompt').value = currentConfig.defaultPrompt || '';
     }
 
     function envIndicator(set, masked) {
@@ -1508,7 +1499,6 @@
       }));
       renderProgress(items);
 
-      const customPrompt = $('#custom-prompt').value.trim();
       const profileId = $('#upload-destination').value;
       const force = forceReprocessEl.checked;
 
@@ -1522,7 +1512,6 @@
         const formData = new FormData();
         formData.append('files', file);
         formData.append('relativePath', relativePath);
-        if (customPrompt) formData.append('customPrompt', customPrompt);
         if (profileId) formData.append('profileId', profileId);
         if (force) formData.append('force', '1');
 
