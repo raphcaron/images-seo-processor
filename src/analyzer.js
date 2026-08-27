@@ -92,7 +92,7 @@ export async function processImage(filePath, config, customPrompt = '', displayN
     }
 
     const seoFilename = fields.filename ? buildFilename(analysis.filename, ext) : basename(originalName);
-    const outputPath = renameFile(resolvedPath, seoFilename, config.outputDir);
+    const outputPath = renameFile(resolvedPath, seoFilename, config.outputDir, basename(originalName));
     addLog('success', `Renommé: ${originalName} → ${seoFilename}`);
 
     // L'analyse IA (déjà facturée) et le renommage sont acquis à ce stade.
@@ -396,7 +396,7 @@ function buildPrompt(lang, customPrompt = '', fields) {
   const quality = LANGUAGE_QUALITY[lang] || `Réponds strictement ${lang}, sans mélanger d'autres langues.`;
 
   const fieldDescriptions = [];
-  if (fields.filename) fieldDescriptions.push(`- "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier.`);
+  if (fields.filename) fieldDescriptions.push(`- "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier. Sois SPÉCIFIQUE: inclus tout détail qui distingue cette image précise d'une autre similaire (couleur, forme, texte visible, orientation, variante, éléments en arrière-plan...). Ne retombe pas sur un nom générique identique pour plusieurs images qui se ressemblent (ex: pas "logo-entreprise" pour chaque variante d'un même logo, mais "logo-entreprise-rond-bleu", "logo-entreprise-texte-horizontal", etc. selon ce qui les distingue vraiment) — deux images différentes ne doivent recevoir le même nom que si elles sont réellement indiscernables visuellement.`);
   if (fields.altText) fieldDescriptions.push(`- "alt_text": un texte alternatif concis et descriptif ${lang} (max 125 caractères, destiné à décrire l'image pour l'accessibilité et le SEO)`);
   if (fields.keywords) fieldDescriptions.push(`- "keywords": un tableau de 3 à 5 mots-clés pertinents ${lang}`);
 
