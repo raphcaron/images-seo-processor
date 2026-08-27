@@ -25,12 +25,23 @@ const LANGUAGE_MAP = {
   de: 'auf Deutsch',
 };
 
+// Aucun fournisseur IA (Claude, Gemini, Ollama) ne comprend le SVG — c'est
+// un format vectoriel/XML, pas une image raster. On le rasterise en PNG
+// uniquement pour l'analyse; le fichier original reste un SVG intact pour
+// le renommage et l'upload (pas de perte de qualité vectorielle).
+async function prepareForAnalysis(imageData, ext) {
+  if (ext === 'svg') {
+    const pngBuffer = await sharp(imageData).png().toBuffer();
+    return { base64Image: pngBuffer.toString('base64'), mediaType: 'image/png' };
+  }
+  return { base64Image: imageData.toString('base64'), mediaType: MEDIA_TYPES[ext] || 'image/jpeg' };
+}
+
 export async function processImage(filePath, config, customPrompt = '', displayName = '', destination = null) {
   const resolvedPath = resolve(filePath);
   const imageData = readFileSync(resolvedPath);
-  const base64Image = imageData.toString('base64');
   const ext = resolvedPath.split('.').pop().toLowerCase();
-  const mediaType = MEDIA_TYPES[ext] || 'image/jpeg';
+  const { base64Image, mediaType } = await prepareForAnalysis(imageData, ext);
   const originalName = displayName || basename(resolvedPath);
   const lang = LANGUAGE_MAP[config.language] || 'en français';
 

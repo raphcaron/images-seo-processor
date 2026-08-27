@@ -118,7 +118,9 @@ Un champ texte au-dessus de la zone d'upload permet d'ajouter des instructions p
 
 ### Formats supportés
 
-JPG, PNG, WebP, AVIF, GIF (max 20 Mo par fichier)
+JPG, PNG, WebP, AVIF, GIF, SVG (max 20 Mo par fichier)
+
+Le SVG est un format vectoriel qu'aucun fournisseur IA ne peut analyser directement — il est converti en PNG en mémoire uniquement pour l'analyse (nom de fichier/alt-text/mots-clés). Le fichier renommé et envoyé à la destination reste le SVG d'origine, intact.
 
 ## Architecture
 

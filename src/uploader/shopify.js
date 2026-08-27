@@ -10,6 +10,7 @@ const MEDIA_TYPES = {
   webp: 'image/webp',
   avif: 'image/avif',
   gif: 'image/gif',
+  svg: 'image/svg+xml',
 };
 
 export async function uploadToShopify(filePath, altText, shopifyCreds) {

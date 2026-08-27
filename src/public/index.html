@@ -791,7 +791,7 @@
         <div class="upload-zone" id="drop-zone">
           <div class="icon">&#128444;</div>
           <p>Glissez vos images ou un dossier ici<br>ou <a href="#" id="select-files-link">cliquez pour sélectionner des fichiers</a><br>ou <a href="#" id="select-folder-link">sélectionnez un dossier entier</a></p>
-          <p class="hint">JPG, PNG, WebP, AVIF, GIF — max 20 Mo — sous-dossiers inclus</p>
+          <p class="hint">JPG, PNG, WebP, AVIF, GIF, SVG — max 20 Mo — sous-dossiers inclus</p>
           <input type="file" id="file-input" multiple accept="image/*">
           <input type="file" id="folder-input" webkitdirectory multiple>
         </div>
@@ -1360,7 +1360,7 @@
     const fileInput = $('#file-input');
     const folderInput = $('#folder-input');
     const progressBox = $('#upload-progress');
-    const IMAGE_EXT_RE = /\.(jpe?g|png|webp|avif|gif)$/i;
+    const IMAGE_EXT_RE = /\.(jpe?g|png|webp|avif|gif|svg)$/i;
     const UPLOAD_CONCURRENCY = 4;
     // Miniatures générées côté client (aucun aller-retour serveur nécessaire)
     // pour montrer la photo en cours de traitement dans le panneau d'activité.

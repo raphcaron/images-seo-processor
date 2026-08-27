@@ -5,7 +5,7 @@ import { getProfile } from './profiles.js';
 import { state, addLog, processingFiles, doneFiles, queue } from './state.js';
 
 const SUPPORTED_EXTENSIONS = new Set([
-  '.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif',
+  '.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.svg',
 ]);
 
 let watcherInstance = null;
