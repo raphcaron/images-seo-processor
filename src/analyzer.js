@@ -25,6 +25,18 @@ const LANGUAGE_MAP = {
   de: 'auf Deutsch',
 };
 
+// Consigne de qualité linguistique, répétée en tête de prompt: sans elle, un
+// modèle plus faible (surtout en local) retombe facilement sur des mots
+// anglais dans le "filename" (ex: "kitchen-sink-faucet-modern" au lieu de
+// "evier-robinet-cuisine-moderne"), même si "en français" est déjà demandé
+// plus loin dans le prompt.
+const LANGUAGE_QUALITY = {
+  'en français': 'Écris exclusivement en français, avec une orthographe et une grammaire irréprochables, et les accents corrects (é, è, à, ç, î, ô, û, ù, ê, ï...). N\'utilise AUCUN mot ni anglicisme anglais — par exemple jamais "sink", "faucet", "kitchen", "modern", "home", "light", "design" au sens anglais: utilise toujours l\'équivalent français correct ("évier", "robinet", "cuisine", "moderne", "maison", "lumière", "style"/"conception"). Si un terme n\'a pas d\'équivalent français courant, choisis quand même le mot français le plus proche, jamais l\'anglais. Reste simple, direct et naturel.',
+  'in English': 'Write exclusively in English, with correct spelling and grammar throughout.',
+  'en español': 'Escribe exclusivamente en español, con ortografía y gramática correctas, incluyendo los acentos y la ñ cuando corresponda.',
+  'auf Deutsch': 'Schreibe ausschließlich auf Deutsch, mit korrekter Rechtschreibung, Grammatik und den richtigen Umlauten (ä, ö, ü, ß).',
+};
+
 // Aucun fournisseur IA (Claude, Gemini, Ollama) ne comprend le SVG — c'est
 // un format vectoriel/XML, pas une image raster. On le rasterise en PNG
 // uniquement pour l'analyse; le fichier original reste un SVG intact pour
@@ -353,7 +365,11 @@ function parseAnalysisResponse(rawText) {
 }
 
 function buildPrompt(lang, customPrompt = '') {
+  const quality = LANGUAGE_QUALITY[lang] || `Réponds strictement ${lang}, sans mélanger d'autres langues.`;
+
   let prompt = `Analyse cette image pour le SEO d'un site web. Réponds UNIQUEMENT avec un JSON valide, sans aucun texte avant ou après.
+
+${quality}
 
 Le JSON doit contenir exactement ces champs:
 - "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier.

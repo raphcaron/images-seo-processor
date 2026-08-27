@@ -824,6 +824,11 @@
             <option value="">Aucune (local)</option>
           </select>
         </div>
+        <div class="field">
+          <label>Contexte par défaut pour l'IA (entreprise, secteur, ton...)</label>
+          <textarea id="cfg-default-prompt" rows="3" placeholder="Ex: Images pour une entreprise de distribution de matériel de plomberie et électrique."></textarea>
+          <p class="hint" style="margin-top:.35rem">Appliqué à tous les traitements (upload manuel, dossier surveillé, nouvel essai) — le champ "Instructions pour l'IA" ci-contre en repart et peut le compléter pour un lot précis.</p>
+        </div>
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
           <button class="btn btn-primary" id="cfg-save">Sauvegarder</button>
           <button class="btn" id="cfg-test">Tester la config</button>
@@ -1072,6 +1077,11 @@
       $('#cfg-language').value = currentConfig.language;
       if (currentConfig.model) $('#cfg-model').value = currentConfig.model;
       $('#cfg-default-profile').value = currentConfig.defaultProfileId || '';
+      $('#cfg-default-prompt').value = currentConfig.defaultPrompt || '';
+      // Pré-remplit le champ d'upload avec le contexte par défaut (modifiable
+      // pour ce lot précis sans toucher au défaut sauvegardé) — seulement au
+      // chargement de la page, pour ne pas écraser une saisie en cours.
+      $('#custom-prompt').value = currentConfig.defaultPrompt || '';
     }
 
     function envIndicator(set, masked) {
@@ -1350,6 +1360,7 @@
         language: $('#cfg-language').value,
         model: $('#cfg-model').value,
         defaultProfileId: $('#cfg-default-profile').value || null,
+        defaultPrompt: $('#cfg-default-prompt').value.trim(),
       });
       await loadConfig();
     });

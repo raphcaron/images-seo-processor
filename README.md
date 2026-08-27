@@ -85,15 +85,17 @@ Le fichier `config.json` à la racine :
   "language": "fr",
   "model": "claude-opus-4-8",
   "shopifyApiVersion": "2025-01",
-  "defaultProfileId": null
+  "defaultProfileId": null,
+  "defaultPrompt": ""
 }
 ```
 
 | Champ | Valeurs possibles | Description |
 |---|---|---|
 | `language` | `fr`, `en`, `es`, `de` | Langue des textes générés |
-| `model` | ex: `claude-opus-4-8`, `gemini-flash-latest`, `local:qwen3-vl:8b` | Modèle IA utilisé — voir "Modèles IA disponibles" plus haut |
+| `model` | ex: `claude-opus-4-8`, `gemini-flash-latest`, `local:qwen3-vl:8b-instruct` | Modèle IA utilisé — voir "Modèles IA disponibles" plus haut |
 | `defaultProfileId` | id d'une destination, ou `null` | Destination utilisée pour le dossier surveillé `input/` |
+| `defaultPrompt` | texte libre, ou `""` | Contexte permanent donné à l'IA pour chaque image (entreprise, secteur, ton...) — appliqué à l'upload manuel, au dossier surveillé et aux nouveaux essais. Modifiable depuis la carte "Configuration" de l'interface. |
 
 La configuration est aussi modifiable depuis l'interface.
 
