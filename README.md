@@ -115,6 +115,10 @@ Avant l'upload, choisissez la destination (WordPress, Shopify, ou "Aucune" pour 
 
 Le champ "Contexte pour l'IA" de la carte Configuration (entreprise, secteur, ton, public cible...) est pris en compte pour le nom de fichier, le texte alternatif et les mots-clés de chaque image — pour tous les traitements (upload manuel, dossier surveillé `input/`, nouveaux essais).
 
+### Champs générés par l'IA
+
+Trois interrupteurs dans la carte Configuration ("Champs à générer par l'IA") activent ou désactivent indépendamment le nom de fichier (titre), le texte alternatif et les mots-clés — tous activés par défaut. Utile par exemple pour désactiver le renommage si tu préfères nommer tes fichiers toi-même (souvent plus juste qu'une IA) tout en gardant l'alt-text et les mots-clés automatiques. Un champ désactivé n'est même pas demandé à l'IA — s'ils sont tous les trois désactivés, l'image est directement copiée dans `output/` sous son nom d'origine sans appel IA. Ce réglage est global et s'applique à tous les traitements.
+
 ### Formats supportés
 
 JPG, PNG, WebP, AVIF, GIF, SVG (max 20 Mo par fichier)

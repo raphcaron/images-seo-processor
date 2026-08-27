@@ -83,6 +83,9 @@ export function createServer(config) {
     if (req.body.language !== undefined) config.language = req.body.language;
     if (req.body.model !== undefined) config.model = req.body.model;
     if (req.body.defaultProfileId !== undefined) config.defaultProfileId = req.body.defaultProfileId;
+    if (req.body.generateFilename !== undefined) config.generateFilename = req.body.generateFilename;
+    if (req.body.generateAltText !== undefined) config.generateAltText = req.body.generateAltText;
+    if (req.body.generateKeywords !== undefined) config.generateKeywords = req.body.generateKeywords;
     writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
     addLog('info', `Config: platform=${config.platform}, language=${config.language}`);
     res.json(config);

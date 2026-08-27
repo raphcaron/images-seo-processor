@@ -49,25 +49,49 @@ async function prepareForAnalysis(imageData, ext) {
   return { base64Image: imageData.toString('base64'), mediaType: MEDIA_TYPES[ext] || 'image/jpeg' };
 }
 
+// Les trois champs générés par l'IA (nom de fichier/titre, texte alternatif,
+// mots-clés) sont indépendants — désactivé si absent de la config, activé
+// par défaut. Certains utilisateurs préfèrent nommer leurs fichiers
+// eux-mêmes (résultat souvent meilleur qu'une IA) tout en gardant l'alt-text
+// et/ou les mots-clés automatiques.
+function resolveFields(config) {
+  return {
+    filename: config.generateFilename !== false,
+    altText: config.generateAltText !== false,
+    keywords: config.generateKeywords !== false,
+  };
+}
+
 export async function processImage(filePath, config, customPrompt = '', displayName = '', destination = null) {
   const resolvedPath = resolve(filePath);
-  const imageData = readFileSync(resolvedPath);
   const ext = resolvedPath.split('.').pop().toLowerCase();
-  const { base64Image, mediaType } = await prepareForAnalysis(imageData, ext);
   const originalName = displayName || basename(resolvedPath);
   const lang = LANGUAGE_MAP[config.language] || 'en français';
+  const fields = resolveFields(config);
 
   state.isProcessing = true;
   state.currentFile = originalName;
-  state.currentStep = `Analyse IA (${config.model || 'claude-opus-4-8'}) en cours`;
   doneFiles.add(resolvedPath);
-  addLog('info', `Analyse IA: ${originalName}`);
 
   try {
-    const analysis = await analyzeImage(base64Image, mediaType, lang, config, customPrompt);
-    addLog('info', `→ "${analysis.filename}" | alt: "${analysis.alt_text}"`);
+    let analysis;
+    if (!fields.filename && !fields.altText && !fields.keywords) {
+      addLog('info', `Analyse IA ignorée (aucun champ activé): ${originalName}`);
+      analysis = { filename: undefined, alt_text: '', keywords: [] };
+    } else {
+      state.currentStep = `Analyse IA (${config.model || 'claude-opus-4-8'}) en cours`;
+      addLog('info', `Analyse IA: ${originalName}`);
+      const imageData = readFileSync(resolvedPath);
+      const { base64Image, mediaType } = await prepareForAnalysis(imageData, ext);
+      analysis = await analyzeImage(base64Image, mediaType, lang, config, customPrompt, fields);
+      const parts = [];
+      if (fields.filename) parts.push(`nom: "${analysis.filename}"`);
+      if (fields.altText) parts.push(`alt: "${analysis.alt_text}"`);
+      if (fields.keywords) parts.push(`mots-clés: "${analysis.keywords.join(', ')}"`);
+      addLog('info', `→ ${parts.join(' | ')}`);
+    }
 
-    const seoFilename = buildFilename(analysis.filename, ext);
+    const seoFilename = fields.filename ? buildFilename(analysis.filename, ext) : basename(originalName);
     const outputPath = renameFile(resolvedPath, seoFilename, config.outputDir);
     addLog('success', `Renommé: ${originalName} → ${seoFilename}`);
 
@@ -236,21 +260,21 @@ async function testOllama(model) {
   return { ok: true, message: `Ollama: modèle "${model}" disponible localement` };
 }
 
-function analyzeImage(base64Image, mediaType, lang, config, customPrompt = '') {
+function analyzeImage(base64Image, mediaType, lang, config, customPrompt = '', fields) {
   const model = config.model || 'claude-opus-4-8';
   if (model.startsWith('local:')) {
-    return analyzeWithOllama(base64Image, mediaType, lang, model.slice('local:'.length), customPrompt);
+    return analyzeWithOllama(base64Image, mediaType, lang, model.slice('local:'.length), customPrompt, fields);
   }
   if (model.startsWith('gemini-')) {
-    return analyzeWithGemini(base64Image, mediaType, lang, model, customPrompt);
+    return analyzeWithGemini(base64Image, mediaType, lang, model, customPrompt, fields);
   }
-  return analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt);
+  return analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt, fields);
 }
 
 // Client construit à chaque appel (pas de singleton au chargement du module)
 // pour que sauvegarder une nouvelle clé ANTHROPIC_API_KEY depuis l'interface
 // prenne effet immédiatement, sans redémarrer le serveur.
-async function analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt = '') {
+async function analyzeWithClaude(base64Image, mediaType, lang, model, customPrompt = '', fields) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model,
@@ -269,20 +293,20 @@ async function analyzeWithClaude(base64Image, mediaType, lang, model, customProm
           },
           {
             type: 'text',
-            text: buildPrompt(lang, customPrompt),
+            text: buildPrompt(lang, customPrompt, fields),
           },
         ],
       },
     ],
   });
 
-  return parseAnalysisResponse(response.content[0].text);
+  return parseAnalysisResponse(response.content[0].text, fields);
 }
 
 // Client construit à chaque appel (pas de singleton au chargement du module)
 // pour que sauvegarder une nouvelle clé GEMINI_API_KEY depuis l'interface
 // prenne effet immédiatement, sans redémarrer le serveur.
-async function analyzeWithGemini(base64Image, mediaType, lang, model, customPrompt = '') {
+async function analyzeWithGemini(base64Image, mediaType, lang, model, customPrompt = '', fields) {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY manquante — ajoute une clé Gemini gratuite dans les paramètres');
   }
@@ -294,21 +318,21 @@ async function analyzeWithGemini(base64Image, mediaType, lang, model, customProm
       {
         role: 'user',
         parts: [
-          { text: buildPrompt(lang, customPrompt) },
+          { text: buildPrompt(lang, customPrompt, fields) },
           { inlineData: { mimeType: mediaType, data: base64Image } },
         ],
       },
     ],
   });
 
-  return parseAnalysisResponse(response.text);
+  return parseAnalysisResponse(response.text, fields);
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 
 // Modèle vision local via Ollama — gratuit, illimité, aucune clé API,
 // tourne entièrement sur la machine (aucune donnée envoyée à l'extérieur).
-async function analyzeWithOllama(base64Image, mediaType, lang, model, customPrompt = '') {
+async function analyzeWithOllama(base64Image, mediaType, lang, model, customPrompt = '', fields) {
   // Le décodeur d'image d'Ollama (llama.cpp) ne supporte pas WebP/AVIF —
   // on reconvertit systématiquement en PNG avant l'envoi, quel que soit
   // le format source, pour que ça marche avec toutes les photos.
@@ -322,7 +346,7 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        prompt: buildPrompt(lang, customPrompt),
+        prompt: buildPrompt(lang, customPrompt, fields),
         images: [pngBase64],
         stream: false,
         // Les tags "thinking" (ex: qwen3-vl:8b, contrairement aux variantes
@@ -345,10 +369,10 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
   }
 
   const data = await response.json();
-  return parseAnalysisResponse(data.response);
+  return parseAnalysisResponse(data.response, fields);
 }
 
-function parseAnalysisResponse(rawText) {
+function parseAnalysisResponse(rawText, fields) {
   const text = (rawText || '').trim();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
@@ -357,29 +381,36 @@ function parseAnalysisResponse(rawText) {
 
   const parsed = JSON.parse(jsonMatch[0]);
 
-  if (!parsed.filename || !parsed.alt_text || !parsed.keywords) {
-    throw new Error(`Champs manquants: ${JSON.stringify(parsed)}`);
-  }
+  if (fields.filename && !parsed.filename) throw new Error(`Champ "filename" manquant: ${JSON.stringify(parsed)}`);
+  if (fields.altText && !parsed.alt_text) throw new Error(`Champ "alt_text" manquant: ${JSON.stringify(parsed)}`);
+  if (fields.keywords && !parsed.keywords) throw new Error(`Champ "keywords" manquant: ${JSON.stringify(parsed)}`);
 
-  return parsed;
+  return {
+    filename: parsed.filename,
+    alt_text: parsed.alt_text || '',
+    keywords: parsed.keywords || [],
+  };
 }
 
-function buildPrompt(lang, customPrompt = '') {
+function buildPrompt(lang, customPrompt = '', fields) {
   const quality = LANGUAGE_QUALITY[lang] || `Réponds strictement ${lang}, sans mélanger d'autres langues.`;
+
+  const fieldDescriptions = [];
+  if (fields.filename) fieldDescriptions.push(`- "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier.`);
+  if (fields.altText) fieldDescriptions.push(`- "alt_text": un texte alternatif concis et descriptif ${lang} (max 125 caractères, destiné à décrire l'image pour l'accessibilité et le SEO)`);
+  if (fields.keywords) fieldDescriptions.push(`- "keywords": un tableau de 3 à 5 mots-clés pertinents ${lang}`);
 
   let prompt = `Analyse cette image pour le SEO d'un site web. Réponds UNIQUEMENT avec un JSON valide, sans aucun texte avant ou après.
 
 ${quality}
 
 Le JSON doit contenir exactement ces champs:
-- "filename": un nom de fichier SEO-friendly ${lang} (max 60 caractères, mots séparés par des tirets, pertinent pour les moteurs de recherche, sans articles comme "le", "la", "un", "une", "des", "the", "a", "an"). Ne PAS inclure d'extension de fichier.
-- "alt_text": un texte alternatif concis et descriptif ${lang} (max 125 caractères, destiné à décrire l'image pour l'accessibilité et le SEO)
-- "keywords": un tableau de 3 à 5 mots-clés pertinents ${lang}
+${fieldDescriptions.join('\n')}
 
 IMPORTANT: Retourne UNIQUEMENT le JSON brut, sans blocs de code markdown.`;
 
   if (customPrompt) {
-    prompt += `\n\nContexte supplémentaire fourni par l'utilisateur — utilise ces informations pour guider le nom de fichier, le texte alternatif et les mots-clés:\n${customPrompt}`;
+    prompt += `\n\nContexte supplémentaire fourni par l'utilisateur — utilise ces informations pour guider ta réponse:\n${customPrompt}`;
   }
 
   return prompt;

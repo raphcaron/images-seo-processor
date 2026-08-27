@@ -825,6 +825,21 @@
           </select>
         </div>
         <div class="field">
+          <label>Champs à générer par l'IA</label>
+          <label class="switch-row" style="margin-bottom:.4rem">
+            <span class="switch"><input type="checkbox" id="cfg-gen-filename"><span class="switch-slider"></span></span>
+            <span class="switch-label">Nom de fichier (titre)</span>
+          </label>
+          <label class="switch-row" style="margin-bottom:.4rem">
+            <span class="switch"><input type="checkbox" id="cfg-gen-alt"><span class="switch-slider"></span></span>
+            <span class="switch-label">Texte alternatif</span>
+          </label>
+          <label class="switch-row">
+            <span class="switch"><input type="checkbox" id="cfg-gen-keywords"><span class="switch-slider"></span></span>
+            <span class="switch-label">Mots-clés</span>
+          </label>
+        </div>
+        <div class="field">
           <label>Contexte pour l'IA</label>
           <div style="display:flex;gap:.5rem;align-items:flex-start">
             <textarea id="cfg-context-preview" rows="3" disabled style="flex:1;opacity:.7"></textarea>
@@ -1079,6 +1094,9 @@
       $('#cfg-language').value = currentConfig.language;
       if (currentConfig.model) $('#cfg-model').value = currentConfig.model;
       $('#cfg-default-profile').value = currentConfig.defaultProfileId || '';
+      $('#cfg-gen-filename').checked = currentConfig.generateFilename !== false;
+      $('#cfg-gen-alt').checked = currentConfig.generateAltText !== false;
+      $('#cfg-gen-keywords').checked = currentConfig.generateKeywords !== false;
     }
 
     function envIndicator(set, masked) {
@@ -1399,6 +1417,9 @@
         language: $('#cfg-language').value,
         model: $('#cfg-model').value,
         defaultProfileId: $('#cfg-default-profile').value || null,
+        generateFilename: $('#cfg-gen-filename').checked,
+        generateAltText: $('#cfg-gen-alt').checked,
+        generateKeywords: $('#cfg-gen-keywords').checked,
       });
       await loadConfig();
     });
