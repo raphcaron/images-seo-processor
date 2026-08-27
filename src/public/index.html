@@ -1331,7 +1331,7 @@
         const isDeleted = deletedFiles.has(h.filename);
         const deletedTag = isDeleted ? ' <span style="color:var(--red);font-size:.7rem">(supprimé)</span>' : '';
         html += `<tr>
-        <td><img class="thumb" src="/output/${esc(h.filename)}" alt="" onerror="this.style.display='none'"></td>
+        <td><img class="thumb" src="/output/${esc(h.filename)}?v=${esc(encodeURIComponent(h.date))}" alt="" onerror="this.style.display='none'"></td>
         <td>${esc(h.original)}</td>
         <td><span class="filename">${esc(h.filename)}</span>${deletedTag}</td>
         <td class="alt-text" title="${esc(h.alt_text)}">${esc(h.alt_text)}</td>
