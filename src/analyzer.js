@@ -354,6 +354,12 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
         // interne et renvoient un "response" vide — on veut la réponse finale
         // directement, pas le raisonnement.
         think: false,
+        // Le contexte par défaut d'Ollama (4096 tokens) est souvent trop
+        // court pour une image encodée + le prompt (surtout avec un contexte
+        // métier long) — le modèle le supporte largement plus grand, donc on
+        // force une fenêtre plus généreuse plutôt que de laisser la requête
+        // échouer avec "exceeds the available context size".
+        options: { num_ctx: 8192 },
       }),
     });
   } catch (err) {
