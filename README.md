@@ -90,7 +90,7 @@ Le fichier `config.json` à la racine :
 
 | Champ | Valeurs possibles | Description |
 |---|---|---|
-| `language` | `fr`, `en`, `es`, `de` | Langue des textes générés |
+| `language` | `fr`, `en` | Langue des textes générés |
 | `model` | ex: `claude-opus-4-8`, `gemini-flash-latest`, `local:qwen3-vl:8b-instruct` | Modèle IA utilisé — voir "Modèles IA disponibles" plus haut |
 | `defaultProfileId` | id d'une destination, ou `null` | Destination utilisée pour le dossier surveillé `input/` |
 

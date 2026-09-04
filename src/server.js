@@ -87,7 +87,8 @@ export function createServer(config) {
     if (req.body.generateAltText !== undefined) config.generateAltText = req.body.generateAltText;
     if (req.body.generateKeywords !== undefined) config.generateKeywords = req.body.generateKeywords;
     writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
-    addLog('info', `Config: platform=${config.platform}, language=${config.language}`);
+    const defaultProfile = config.defaultProfileId ? getProfile(ROOT, config.defaultProfileId) : null;
+    addLog('info', `Config sauvegardée: langue=${config.language}, modèle=${config.model}, destination par défaut=${defaultProfile?.name || 'aucune'}`);
     res.json(config);
   });
 

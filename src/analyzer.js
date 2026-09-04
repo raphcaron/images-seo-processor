@@ -21,8 +21,6 @@ const MEDIA_TYPES = {
 const LANGUAGE_MAP = {
   fr: 'en français',
   en: 'in English',
-  es: 'en español',
-  de: 'auf Deutsch',
 };
 
 // Consigne de qualité linguistique, répétée en tête de prompt: sans elle, un
@@ -33,8 +31,6 @@ const LANGUAGE_MAP = {
 const LANGUAGE_QUALITY = {
   'en français': 'Écris exclusivement en français, avec une orthographe et une grammaire irréprochables, et les accents corrects (é, è, à, ç, î, ô, û, ù, ê, ï...). N\'utilise AUCUN mot ni anglicisme anglais — par exemple jamais "sink", "faucet", "kitchen", "modern", "home", "light", "design" au sens anglais: utilise toujours l\'équivalent français correct ("évier", "robinet", "cuisine", "moderne", "maison", "lumière", "style"/"conception"). Si un terme n\'a pas d\'équivalent français courant, choisis quand même le mot français le plus proche, jamais l\'anglais. Reste simple, direct et naturel.',
   'in English': 'Write exclusively in English, with correct spelling and grammar throughout.',
-  'en español': 'Escribe exclusivamente en español, con ortografía y gramática correctas, incluyendo los acentos y la ñ cuando corresponda.',
-  'auf Deutsch': 'Schreibe ausschließlich auf Deutsch, mit korrekter Rechtschreibung, Grammatik und den richtigen Umlauten (ä, ö, ü, ß).',
 };
 
 // Aucun fournisseur IA (Claude, Gemini, Ollama) ne comprend le SVG — c'est
@@ -355,11 +351,13 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
         // directement, pas le raisonnement.
         think: false,
         // Le contexte par défaut d'Ollama (4096 tokens) est souvent trop
-        // court pour une image encodée + le prompt (surtout avec un contexte
-        // métier long) — le modèle le supporte largement plus grand, donc on
-        // force une fenêtre plus généreuse plutôt que de laisser la requête
-        // échouer avec "exceeds the available context size".
-        options: { num_ctx: 8192 },
+        // court pour une image encodée + le prompt. Chaque token de
+        // contexte en plus alloue plus de VRAM pour le cache KV — sur un
+        // GPU 8 Go avec qwen3-vl:8b déjà chargé, il ne reste qu'environ
+        // 1 Go libre à 6144 (mesuré), donc on garde une marge volontairement
+        // modeste au-dessus du dépassement observé (~4700 tokens) plutôt que
+        // de risquer un nouveau "out of memory" CUDA.
+        options: { num_ctx: 5120 },
       }),
     });
   } catch (err) {
@@ -370,6 +368,9 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
     const body = await response.text();
     if (response.status === 404) {
       throw new Error(`Modèle Ollama "${model}" introuvable — télécharge-le avec: ollama pull ${model}`);
+    }
+    if (/cudaMalloc failed|out of memory/i.test(body)) {
+      throw new Error(`Mémoire GPU insuffisante pour "${model}" — ferme les autres apps qui utilisent le GPU (navigateur, jeux...), ou passe à un modèle plus léger (ex: qwen3-vl:4b-instruct)`);
     }
     throw new Error(`Ollama (${response.status}): ${body.slice(0, 300)}`);
   }

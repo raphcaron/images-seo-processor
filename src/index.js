@@ -16,16 +16,10 @@ try {
   process.exit(1);
 }
 
-const validPlatforms = ['wordpress', 'shopify', 'none'];
-if (!validPlatforms.includes(config.platform)) {
-  addLog('error', `platform doit être: ${validPlatforms.join(', ')}`);
-  process.exit(1);
-}
-
 const PORT = process.env.PORT || 3000;
 
 const app = createServer(config);
 app.listen(PORT, () => {
   addLog('info', `Image SEO Processor — http://localhost:${PORT}`);
-  addLog('info', `Plateforme: ${config.platform} | Langue: ${config.language}`);
+  addLog('info', `Langue: ${config.language} | Modèle: ${config.model || 'claude-opus-4-8'}`);
 });
