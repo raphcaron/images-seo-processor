@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { readFileSync, existsSync } from 'fs';
-import { basename, resolve, join } from 'path';
+import { basename, extname, resolve, join } from 'path';
 import { renameFile } from './renamer.js';
+import { outputExtension, optimizeImage } from './optimizer.js';
 import { appendToCsv, readAllHistory } from './csv-writer.js';
 import { uploadToWordPress } from './uploader/wordpress.js';
 import { uploadToShopify } from './uploader/shopify.js';
@@ -87,8 +88,12 @@ export async function processImage(filePath, config, customPrompt = '', displayN
       addLog('info', `→ ${parts.join(' | ')}`);
     }
 
-    const seoFilename = fields.filename ? buildFilename(analysis.filename, ext) : basename(originalName);
+    const targetExt = outputExtension(ext, config);
+    const seoFilename = fields.filename
+      ? buildFilename(analysis.filename, targetExt)
+      : withExtension(basename(originalName), targetExt);
     const outputPath = renameFile(resolvedPath, seoFilename, config.outputDir, basename(originalName));
+    await optimizeImage(outputPath, config);
     addLog('success', `Renommé: ${originalName} → ${seoFilename}`);
 
     // L'analyse IA (déjà facturée) et le renommage sont acquis à ce stade.
@@ -335,48 +340,68 @@ async function analyzeWithOllama(base64Image, mediaType, lang, model, customProm
   const pngBuffer = await sharp(Buffer.from(base64Image, 'base64')).png().toBuffer();
   const pngBase64 = pngBuffer.toString('base64');
 
-  let response;
-  try {
-    response = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        prompt: buildPrompt(lang, customPrompt, fields),
-        images: [pngBase64],
-        stream: false,
-        // Les tags "thinking" (ex: qwen3-vl:8b, contrairement aux variantes
-        // -instruct) passent sinon le budget de génération en raisonnement
-        // interne et renvoient un "response" vide — on veut la réponse finale
-        // directement, pas le raisonnement.
-        think: false,
-        // Le contexte par défaut d'Ollama (4096 tokens) est souvent trop
-        // court pour une image encodée + le prompt. Chaque token de
-        // contexte en plus alloue plus de VRAM pour le cache KV — sur un
-        // GPU 8 Go avec qwen3-vl:8b déjà chargé, il ne reste qu'environ
-        // 1 Go libre à 6144 (mesuré), donc on garde une marge volontairement
-        // modeste au-dessus du dépassement observé (~4700 tokens) plutôt que
-        // de risquer un nouveau "out of memory" CUDA.
-        options: { num_ctx: 5120 },
-      }),
+  const baseOptions = {
+    // Le contexte par défaut d'Ollama (4096 tokens) est souvent trop
+    // court pour une image encodée + le prompt. Chaque token de
+    // contexte en plus alloue plus de VRAM pour le cache KV — sur un
+    // GPU 8 Go avec qwen3-vl:8b déjà chargé, il ne reste qu'environ
+    // 1 Go libre à 6144 (mesuré), donc on garde une marge volontairement
+    // modeste au-dessus du dépassement observé (~4700 tokens) plutôt que
+    // de risquer un nouveau "out of memory" CUDA.
+    num_ctx: 5120,
+  };
+
+  // L'algorithme d'Ollama qui choisit combien de couches offloader sur le
+  // GPU se cale au plus juste sur la mémoire libre du moment (mesuré: marge
+  // "unaccounted" négative dans ses propres logs juste avant le crash) — il
+  // ne laisse donc pas de vraie marge pour le buffer de calcul de l'encodeur
+  // vision, qui s'alloue après coup. Résultat: le crash CUDA "out of memory"
+  // est réel et systématique à ce niveau de VRAM libre, pas un simple pic
+  // passager du navigateur/bureau. Un simple retry ne suffit pas: on force
+  // explicitlement moins de couches sur le GPU au 2e essai pour garantir une
+  // vraie marge, au prix d'une génération plus lente.
+  const attempts = [{ ...baseOptions }, { ...baseOptions, num_gpu: 16 }];
+
+  for (let i = 0; i < attempts.length; i++) {
+    const requestBody = JSON.stringify({
+      model,
+      prompt: buildPrompt(lang, customPrompt, fields),
+      images: [pngBase64],
+      stream: false,
+      // Les tags "thinking" (ex: qwen3-vl:8b, contrairement aux variantes
+      // -instruct) passent sinon le budget de génération en raisonnement
+      // interne et renvoient un "response" vide — on veut la réponse finale
+      // directement, pas le raisonnement.
+      think: false,
+      options: attempts[i],
     });
-  } catch (err) {
-    throw new Error(`Ollama injoignable (${OLLAMA_URL}) — vérifie qu'il tourne (ollama serve): ${err.message}`);
-  }
 
-  if (!response.ok) {
-    const body = await response.text();
-    if (response.status === 404) {
-      throw new Error(`Modèle Ollama "${model}" introuvable — télécharge-le avec: ollama pull ${model}`);
+    let response;
+    try {
+      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody,
+      });
+    } catch (err) {
+      throw new Error(`Ollama injoignable (${OLLAMA_URL}) — vérifie qu'il tourne (ollama serve): ${err.message}`);
     }
-    if (/cudaMalloc failed|out of memory/i.test(body)) {
-      throw new Error(`Mémoire GPU insuffisante pour "${model}" — ferme les autres apps qui utilisent le GPU (navigateur, jeux...), ou passe à un modèle plus léger (ex: qwen3-vl:4b-instruct)`);
-    }
-    throw new Error(`Ollama (${response.status}): ${body.slice(0, 300)}`);
-  }
 
-  const data = await response.json();
-  return parseAnalysisResponse(data.response, fields);
+    if (!response.ok) {
+      const body = await response.text();
+      if (response.status === 404) {
+        throw new Error(`Modèle Ollama "${model}" introuvable — télécharge-le avec: ollama pull ${model}`);
+      }
+      if (/cudaMalloc failed|out of memory/i.test(body)) {
+        if (i < attempts.length - 1) continue;
+        throw new Error(`Mémoire GPU insuffisante pour "${model}" — ferme les autres apps qui utilisent le GPU (navigateur, jeux...), même en offloadant moins de couches sur le GPU`);
+      }
+      throw new Error(`Ollama (${response.status}): ${body.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    return parseAnalysisResponse(data.response, fields);
+  }
 }
 
 function parseAnalysisResponse(rawText, fields) {
@@ -421,6 +446,10 @@ IMPORTANT: Retourne UNIQUEMENT le JSON brut, sans blocs de code markdown.`;
   }
 
   return prompt;
+}
+
+function withExtension(name, ext) {
+  return `${basename(name, extname(name))}.${ext}`;
 }
 
 function buildFilename(aiFilename, ext) {

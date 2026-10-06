@@ -838,6 +838,19 @@
           </label>
         </div>
         <div class="field">
+          <label>Optimisation des images</label>
+          <label class="switch-row" style="margin-bottom:.4rem">
+            <span class="switch"><input type="checkbox" id="cfg-webp"><span class="switch-slider"></span></span>
+            <span class="switch-label">Convertir en WebP, qualité</span>
+            <input type="number" id="cfg-webp-quality" min="1" max="100" style="width:4.5rem;margin-left:.5rem">
+          </label>
+          <label class="switch-row">
+            <span class="switch"><input type="checkbox" id="cfg-resize"><span class="switch-slider"></span></span>
+            <span class="switch-label">Redimensionner, côté long max (px)</span>
+            <input type="number" id="cfg-max-size" min="1" style="width:5rem;margin-left:.5rem">
+          </label>
+        </div>
+        <div class="field">
           <label>Contexte pour l'IA</label>
           <div style="display:flex;gap:.5rem;align-items:flex-start">
             <textarea id="cfg-context-preview" rows="3" disabled style="flex:1;opacity:.7"></textarea>
@@ -1095,6 +1108,10 @@
       $('#cfg-gen-filename').checked = currentConfig.generateFilename !== false;
       $('#cfg-gen-alt').checked = currentConfig.generateAltText !== false;
       $('#cfg-gen-keywords').checked = currentConfig.generateKeywords !== false;
+      $('#cfg-webp').checked = currentConfig.convertToWebp !== false;
+      $('#cfg-webp-quality').value = currentConfig.webpQuality ?? 85;
+      $('#cfg-resize').checked = currentConfig.resizeImages !== false;
+      $('#cfg-max-size').value = currentConfig.maxSize ?? 2500;
     }
 
     function envIndicator(set, masked) {
@@ -1418,6 +1435,10 @@
         generateFilename: $('#cfg-gen-filename').checked,
         generateAltText: $('#cfg-gen-alt').checked,
         generateKeywords: $('#cfg-gen-keywords').checked,
+        convertToWebp: $('#cfg-webp').checked,
+        webpQuality: Number($('#cfg-webp-quality').value),
+        resizeImages: $('#cfg-resize').checked,
+        maxSize: Number($('#cfg-max-size').value),
       });
       await loadConfig();
     });

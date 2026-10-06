@@ -86,6 +86,10 @@ export function createServer(config) {
     if (req.body.generateFilename !== undefined) config.generateFilename = req.body.generateFilename;
     if (req.body.generateAltText !== undefined) config.generateAltText = req.body.generateAltText;
     if (req.body.generateKeywords !== undefined) config.generateKeywords = req.body.generateKeywords;
+    if (req.body.convertToWebp !== undefined) config.convertToWebp = req.body.convertToWebp;
+    if (req.body.webpQuality !== undefined) config.webpQuality = req.body.webpQuality;
+    if (req.body.resizeImages !== undefined) config.resizeImages = req.body.resizeImages;
+    if (req.body.maxSize !== undefined) config.maxSize = req.body.maxSize;
     writeFileSync(join(ROOT, 'config.json'), JSON.stringify(config, null, 2));
     const defaultProfile = config.defaultProfileId ? getProfile(ROOT, config.defaultProfileId) : null;
     addLog('info', `Config sauvegardée: langue=${config.language}, modèle=${config.model}, destination par défaut=${defaultProfile?.name || 'aucune'}`);
